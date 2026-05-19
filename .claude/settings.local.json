@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\mvcka\\\\aesr-gvc\\\\public\\\\badges\" -Filter \"*.webp\")",
+      "Bash(Select-Object Name)",
+      "Bash(grep -i \"\\\\.webp$\")",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem C:\\\\Users\\\\mvcka\\\\aesr-gvc\\\\app -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(cd C:\\\\Users\\\\mvcka\\\\aesr-gvc; try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/api/portrait/147\" -UseBasicParsing -TimeoutSec 15; \"Status: $\\($r.StatusCode\\), ContentType: $\\($r.Headers['Content-Type']\\), Length: $\\($r.Content.Length\\)\" } catch { \"Error: $_\" })",
+      "PowerShell(cd C:\\\\Users\\\\mvcka\\\\aesr-gvc; $meta = Get-Content \"public/gvc-metadata.json\" | ConvertFrom-Json; @\\($meta.\"1337\", $meta.\"420\", $meta.\"6968\", $meta.\"147\"\\) | ForEach-Object { $_.image })",
+      "Bash(npm list *)",
+      "Bash(echo \"DONE $?\")",
+      "Bash(npm uninstall *)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(cd /mnt/c/Users/mvcka/aesr-gvc && npm run build 2>&1 | tail -40)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)"
+    ]
+  }
+}
