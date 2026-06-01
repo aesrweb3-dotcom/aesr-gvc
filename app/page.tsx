@@ -658,7 +658,7 @@ export default function Page() {
   const displayMessage: Record<Phase,string> = {
     IDLE:          "INSERT COIN TO BEGIN",
     COIN_INSERTED: "SELECT YOUR PACK",
-    PACK_SELECTED: `TOKEN ID: ${tokenId???"???"}`,
+    PACK_SELECTED: `TOKEN ID: ${tokenId??"???"}`,
     VENDING:       "DISPENSING...",
     FLAP_READY:    "OPEN COLLECTION FLAP",
     FLAP_OPEN:     "RIP OPEN YOUR PACK!",
