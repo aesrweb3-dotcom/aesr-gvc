@@ -1,44 +1,33 @@
 "use client";
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ─── BRAND ────────────────────────────────────────────────────────────────────
+// ─── COLORS ───────────────────────────────────────────────────────────────────
+const TIER_COLOR  = { Common:"#5eead4", Rare:"#c084fc", Legendary:"#FFE048" } as const;
+const TIER_GLOW   = { Common:"rgba(94,234,212,0.75)", Rare:"rgba(192,132,252,0.75)", Legendary:"rgba(255,224,72,0.85)" } as const;
+const TIER_BG     = {
+  Common:    "linear-gradient(160deg,#071a1a 0%,#0d2e30 55%,#041212 100%)",
+  Rare:      "linear-gradient(160deg,#0e0520 0%,#1c0a38 55%,#080318 100%)",
+  Legendary: "linear-gradient(160deg,#1a0e00 0%,#2c1c00 55%,#120a00 100%)",
+} as const;
+const STAT_COLORS = ["#FF6B9D","#00BFFF","#00FF94","#FF9500"] as const;
 const GOLD = "#FFE048";
-const TIER_COLOR: Record<string, string> = {
-  Common:    "#7ab4e0",
-  Rare:      "#c084fc",
-  Legendary: "#FFE048",
-};
-const TIER_GLOW: Record<string, string> = {
-  Common:    "rgba(122,180,224,0.65)",
-  Rare:      "rgba(192,132,252,0.7)",
-  Legendary: "rgba(255,224,72,0.85)",
-};
-const TIER_BG: Record<string, string> = {
-  Common:    "linear-gradient(160deg,#0b1422 0%,#0f1e35 60%,#0b1422 100%)",
-  Rare:      "linear-gradient(160deg,#120a24 0%,#1e0f3a 60%,#120a24 100%)",
-  Legendary: "linear-gradient(160deg,#1c1400 0%,#2e2200 60%,#1c1400 100%)",
-};
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const ALL_BADGES = [
-  "astro_balls","zoom_in_vibe_out","showtime","flow_state",
-  "vibestr_bronze_tier","checkmate","vibefoot_fan_club","suited_up",
-  "astro_bean","gud_meat","hoodie_up_society","twenty_badges",
-  "yin_n_yang","vibestr_pink_tier","party_in_the_back",
-  "unfathomable_vibes","gradient_hatrick","one_of_one",
-  "fifty_badges","cosmic_guardian","super_rare","pothead",
-  "elite_rainbow_ranger","anchorman","rainbow_visor",
+  "astro_balls","zoom_in_vibe_out","showtime","flow_state","vibestr_bronze_tier",
+  "checkmate","vibefoot_fan_club","suited_up","astro_bean","gud_meat",
+  "hoodie_up_society","twenty_badges","yin_n_yang","vibestr_pink_tier",
+  "party_in_the_back","unfathomable_vibes","gradient_hatrick","one_of_one",
+  "fifty_badges","cosmic_guardian","super_rare","pothead","elite_rainbow_ranger",
+  "anchorman","rainbow_visor",
 ];
 const ARCHETYPES = [
-  "The Cosmic Drifter","The Neon Prophet","The Vibe Architect",
-  "The Golden Wanderer","The Drift King","The Frequency Holder",
-  "The Stellar Nomad","The Radiant Sage","The Vibe Curator",
-  "The Etheric Rebel","The Sound Alchemist","The Neon Mystic",
-  "The Light Chaser","The Groove Oracle","The Vibe Sovereign",
-  "The Chromatic Shaman","The Signal Rider","The Vibe Phantom",
-  "The Astral Cowboy","The Frequency Mage",
+  "The Cosmic Drifter","The Neon Prophet","The Vibe Architect","The Golden Wanderer",
+  "The Drift King","The Frequency Holder","The Stellar Nomad","The Radiant Sage",
+  "The Vibe Curator","The Etheric Rebel","The Sound Alchemist","The Neon Mystic",
+  "The Light Chaser","The Groove Oracle","The Vibe Sovereign","The Chromatic Shaman",
+  "The Signal Rider","The Vibe Phantom","The Astral Cowboy","The Frequency Mage",
 ];
 const QUOTES = [
   "Tuned to frequencies others can't hear.",
@@ -52,1104 +41,784 @@ const QUOTES = [
   "The chain knows what the eye can't see.",
   "Frequency: locked. Vibe: immaculate.",
   "Some are minted, some are chosen.",
-  "The future belongs to the curious.",
   "Running on pure good energy since genesis.",
   "Calibrated for maximum vibe output.",
   "The shaka is eternal.",
 ];
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
-type Phase =
-  | "IDLE" | "ACTIVE" | "VENDING"
-  | "DRAWER" | "PACK_HAND" | "CARD_REVEALED";
-type Tier = "Common" | "Rare" | "Legendary";
+type Phase = "PIN" | "READY" | "DROPPING" | "GRABBING" | "LIFTING" | "CHUTE" | "TEARING" | "CARD";
+type Tier  = "Common" | "Rare" | "Legendary";
 interface CardData {
-  rarity: number; drip: number; energy: number; aura: number;
-  tier: Tier; rank: number; archetype: string; quote: string; badges: string[];
+  rarity:number; drip:number; energy:number; aura:number;
+  tier:Tier; rank:number; archetype:string; quote:string; badges:string[];
 }
 
-// ─── SEEDED RNG ───────────────────────────────────────────────────────────────
-function seededRNG(seed: number) {
-  let s = ((seed * 1664525) + 1013904223) >>> 0;
-  return () => { s = ((s * 1664525) + 1013904223) >>> 0; return s / 0x100000000; };
+// ─── RNG ──────────────────────────────────────────────────────────────────────
+function rng(seed:number){
+  let s=((seed*1664525)+1013904223)>>>0;
+  return ()=>{ s=((s*1664525)+1013904223)>>>0; return s/0x100000000; };
 }
-function generateCardData(id: number): CardData {
-  const rng    = seededRNG(id);
-  const rarity = 29 + Math.floor(rng() * 71);
-  const drip   = 19 + Math.floor(rng() * 81);
-  const energy = 24 + Math.floor(rng() * 76);
-  const aura   = 14 + Math.floor(rng() * 86);
-  const avg    = (rarity + drip + energy + aura) / 4;
-  const tier: Tier = avg >= 75 ? "Legendary" : avg >= 55 ? "Rare" : "Common";
-  const rank   = 1 + Math.floor(seededRNG(id + 77)() * 6969);
-  const archetype = ARCHETYPES[Math.floor(seededRNG(id + 13)() * ARCHETYPES.length)];
-  const quote  = QUOTES[Math.floor(seededRNG(id + 31)() * QUOTES.length)];
-  const shuffled = [...ALL_BADGES].sort(() => seededRNG(id + 99)() - 0.5);
-  const count  = tier === "Legendary" ? 4 : tier === "Rare" ? 3 : 2;
-  return { rarity, drip, energy, aura, tier, rank, archetype, quote, badges: shuffled.slice(0, count) };
+function generateCard(id:number):CardData{
+  const r=rng(id), r2=rng(id+77), r3=rng(id+13), r4=rng(id+31), r5=rng(id+99);
+  const rarity=29+Math.floor(r()*71), drip=19+Math.floor(r()*81);
+  const energy=24+Math.floor(r()*76), aura=14+Math.floor(r()*86);
+  const avg=(rarity+drip+energy+aura)/4;
+  const tier:Tier = avg>=75?"Legendary":avg>=55?"Rare":"Common";
+  const rank=1+Math.floor(r2()*6969);
+  const archetype=ARCHETYPES[Math.floor(r3()*ARCHETYPES.length)];
+  const quote=QUOTES[Math.floor(r4()*QUOTES.length)];
+  const shuffled=[...ALL_BADGES].sort(()=>r5()-0.5);
+  const count=tier==="Legendary"?4:tier==="Rare"?3:2;
+  return { rarity,drip,energy,aura,tier,rank,archetype,quote,badges:shuffled.slice(0,count) };
 }
 
 // ─── AUDIO ────────────────────────────────────────────────────────────────────
-function getAudio(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  if (!w.__ac) { try { w.__ac = new (window.AudioContext || (w as any).webkitAudioContext)(); } catch { return null; } }
-  if (w.__ac.state === "suspended") w.__ac.resume().catch(() => {});
+function ac(){
+  if(typeof window==="undefined") return null;
+  const w=window as any;
+  if(!w.__ac){ try{ w.__ac=new(window.AudioContext||(w as any).webkitAudioContext)(); }catch{ return null; } }
+  if(w.__ac.state==="suspended") w.__ac.resume().catch(()=>{});
   return w.__ac as AudioContext;
 }
-function sfxCoin() {
-  const ctx = getAudio(); if (!ctx) return; const t = ctx.currentTime;
-  [880,1320].forEach((f,i) => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
-    o.frequency.value=f;o.type="sine"; g.gain.setValueAtTime(0,t+i*0.07);g.gain.linearRampToValueAtTime(0.22,t+i*0.07+0.01);g.gain.exponentialRampToValueAtTime(0.001,t+i*0.07+0.2);
-    o.start(t+i*0.07);o.stop(t+i*0.07+0.22); });
-}
-function sfxKey() {
-  const ctx = getAudio(); if (!ctx) return; const t = ctx.currentTime;
+function sfxCoin(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
+  [880,1320].forEach((f,i)=>{ const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
+    o.frequency.value=f;o.type="sine";g.gain.setValueAtTime(0,t+i*.07);g.gain.linearRampToValueAtTime(.22,t+i*.07+.01);g.gain.exponentialRampToValueAtTime(.001,t+i*.07+.2);o.start(t+i*.07);o.stop(t+i*.07+.22); }); }
+function sfxKey(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
   const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
-  o.frequency.value=600+Math.random()*200;o.type="square"; g.gain.setValueAtTime(0.07,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.055);
-  o.start(t);o.stop(t+0.06);
-}
-function sfxVend() {
-  const ctx = getAudio(); if (!ctx) return; const t = ctx.currentTime;
+  o.frequency.value=600+Math.random()*200;o.type="square";g.gain.setValueAtTime(.07,t);g.gain.exponentialRampToValueAtTime(.001,t+.06);o.start(t);o.stop(t+.07); }
+function sfxDrop(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
   const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
-  o.type="sawtooth"; o.frequency.setValueAtTime(100,t);o.frequency.linearRampToValueAtTime(30,t+0.55);
-  g.gain.setValueAtTime(0.16,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.6);
-  o.start(t);o.stop(t+0.65);
-}
-function sfxTear() {
-  const ctx = getAudio(); if (!ctx) return; const t = ctx.currentTime;
-  const buf=ctx.createBuffer(1,ctx.sampleRate*0.28,ctx.sampleRate);
+  o.type="sawtooth";o.frequency.setValueAtTime(180,t);o.frequency.linearRampToValueAtTime(40,t+.7);
+  g.gain.setValueAtTime(.18,t);g.gain.exponentialRampToValueAtTime(.001,t+.75);o.start(t);o.stop(t+.8); }
+function sfxGrab(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
+  [440,554,660].forEach((f,i)=>{ const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
+    o.type="triangle";o.frequency.value=f;g.gain.setValueAtTime(0,t+i*.04);g.gain.linearRampToValueAtTime(.15,t+i*.04+.02);g.gain.exponentialRampToValueAtTime(.001,t+i*.04+.18);o.start(t+i*.04);o.stop(t+i*.04+.2); }); }
+function sfxReveal(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
+  [523,659,784,1047].forEach((f,i)=>{ const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
+    o.type="sine";o.frequency.value=f;g.gain.setValueAtTime(0,t+i*.09);g.gain.linearRampToValueAtTime(.18,t+i*.09+.02);g.gain.exponentialRampToValueAtTime(.001,t+i*.09+.32);o.start(t+i*.09);o.stop(t+i*.09+.38); }); }
+function sfxTear(){ const ctx=ac(); if(!ctx)return; const t=ctx.currentTime;
+  const buf=ctx.createBuffer(1,ctx.sampleRate*.25,ctx.sampleRate);
   const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   const s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),g=ctx.createGain();
-  f.type="bandpass";f.frequency.value=3200;f.Q.value=0.7;
-  s.buffer=buf;s.connect(f);f.connect(g);g.connect(ctx.destination);
-  g.gain.setValueAtTime(0.32,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
-  s.start(t);
-}
-function sfxReveal() {
-  const ctx = getAudio(); if (!ctx) return; const t = ctx.currentTime;
-  [523,659,784,1047].forEach((f,i) => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g);g.connect(ctx.destination);
-    o.type="sine";o.frequency.value=f; g.gain.setValueAtTime(0,t+i*0.09);g.gain.linearRampToValueAtTime(0.18,t+i*0.09+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+i*0.09+0.32);
-    o.start(t+i*0.09);o.stop(t+i*0.09+0.38); });
-}
+  f.type="bandpass";f.frequency.value=3000;f.Q.value=.8;s.buffer=buf;s.connect(f);f.connect(g);g.connect(ctx.destination);
+  g.gain.setValueAtTime(.3,t);g.gain.exponentialRampToValueAtTime(.001,t+.25);s.start(t); }
 
-// ─── GLOBAL CSS ───────────────────────────────────────────────────────────────
-const STYLES = `
-@keyframes ledScroll{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-@keyframes coinIdle{0%,100%{transform:rotate(0deg) scale(1)}20%{transform:rotate(9deg) scale(1.05)}40%{transform:rotate(-7deg) scale(0.97)}60%{transform:rotate(4deg) scale(1.02)}80%{transform:rotate(-2deg) scale(0.99)}}
-@keyframes packFloat{0%,100%{transform:translateY(0px) rotate(-1.5deg)}50%{transform:translateY(-9px) rotate(1.5deg)}}
-@keyframes holoShift{0%{background-position:0% 0%;opacity:.18}33%{background-position:100% 0%;opacity:.3}66%{background-position:100% 100%;opacity:.22}100%{background-position:0% 0%;opacity:.18}}
-@keyframes packShine{0%{left:-60%;opacity:0}15%{opacity:.65}85%{opacity:.55}100%{left:120%;opacity:0}}
-@keyframes drawerGlow{0%,100%{box-shadow:inset 0 0 16px rgba(46,255,46,.1),0 0 12px rgba(46,255,46,.15)}50%{box-shadow:inset 0 0 28px rgba(46,255,46,.22),0 0 26px rgba(46,255,46,.35)}}
-@keyframes machinePulse{0%,100%{box-shadow:0 0 28px rgba(255,224,72,.1),0 0 80px rgba(255,224,72,.04)}50%{box-shadow:0 0 45px rgba(255,224,72,.22),0 0 100px rgba(255,224,72,.08)}}
+// ─── CSS ──────────────────────────────────────────────────────────────────────
+const CSS = `
+@keyframes ledRoll{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes packSwing{0%,100%{transform:rotate(-2deg) translateY(0)}50%{transform:rotate(2deg) translateY(-6px)}}
+@keyframes holoMove{0%{background-position:0% 0%;opacity:.2}33%{background-position:100% 0%;opacity:.35}66%{background-position:100% 100%;opacity:.22}100%{background-position:0% 0%;opacity:.2}}
+@keyframes shine{0%{left:-70%;opacity:0}20%{opacity:.7}80%{opacity:.6}100%{left:130%;opacity:0}}
+@keyframes glow{0%,100%{opacity:.6}50%{opacity:1}}
 @keyframes borderSpin{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
-.coin-idle{animation:coinIdle 2.8s ease-in-out infinite}
-.pack-float{animation:packFloat 3.5s ease-in-out infinite}
-.holo{animation:holoShift 4.5s ease-in-out infinite;background-size:300% 300%}
-.machine-on{animation:machinePulse 3s ease-in-out infinite}
-.drawer-ready{animation:drawerGlow 1.4s ease-in-out infinite}
+@keyframes chuteBounce{0%{transform:translateY(-60px);opacity:0}60%{transform:translateY(8px)}80%{transform:translateY(-4px)}100%{transform:translateY(0);opacity:1}}
+.led-strip{background:linear-gradient(90deg,#ff0080,#ff6600,#ffe100,#00ff94,#00bfff,#bf00ff,#ff0080,#ff6600,#ffe100);background-size:200% 100%;animation:ledRoll 1.8s linear infinite}
+.pack-swing{animation:packSwing 3s ease-in-out infinite}
+.holo{animation:holoMove 4s ease-in-out infinite;background-size:300% 300%}
+.border-spin{animation:borderSpin 5s linear infinite}
+.chute-drop{animation:chuteBounce .6s ease-out forwards}
 `;
 
-// ─── LED STRIP ────────────────────────────────────────────────────────────────
-function LEDStrip({ active }: { active: boolean }) {
-  return (
-    <div style={{
-      height: 5,
-      background: active
-        ? "linear-gradient(90deg,#ff0080,#ff6600,#ffe100,#00ff94,#00bfff,#bf00ff,#ff0080,#ff6600,#ffe100)"
-        : "rgba(255,224,72,0.12)",
-      backgroundSize: active ? "200% 100%" : "100%",
-      animation: active ? "ledScroll 2s linear infinite" : "none",
-      transition: "background 0.6s",
-    }}/>
-  );
+// ─── LED ──────────────────────────────────────────────────────────────────────
+function LED({ on }: { on:boolean }) {
+  return <div className={on?"led-strip":""} style={{ height:5, background:on?"":"rgba(255,255,255,0.06)", transition:"background .5s" }}/>;
 }
 
-// ─── DISPLAY PANEL ────────────────────────────────────────────────────────────
-function DisplayPanel({ msg, active }: { msg: string; active: boolean }) {
+// ─── MINI PACK (inside machine) ───────────────────────────────────────────────
+function MiniPack({ tier, grabbed }: { tier:Tier; grabbed:boolean }) {
+  const tc = TIER_COLOR[tier], tg = TIER_GLOW[tier];
   return (
     <div style={{
-      background: active ? "#001a00" : "#030803",
-      border: `1px solid ${active ? "rgba(46,255,46,0.55)" : "rgba(46,255,46,0.14)"}`,
-      borderRadius: 6, padding: "5px 10px",
-      fontFamily: "'Courier New',monospace", fontSize: 11,
-      color: active ? "#2EFF2E" : "rgba(46,255,46,0.28)",
-      letterSpacing: "0.12em", textTransform: "uppercase",
-      textShadow: active ? "0 0 10px rgba(46,255,46,0.9)" : "none",
-      boxShadow: active ? "inset 0 0 14px rgba(46,255,46,0.1)" : "none",
-      transition: "all 0.4s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-    }}>{msg}</div>
-  );
-}
-
-// ─── DRAGGABLE COIN ───────────────────────────────────────────────────────────
-function DraggableCoin({ onInsert, slotRef }: {
-  onInsert: () => void;
-  slotRef: React.RefObject<HTMLDivElement>;
-}) {
-  const [dx, setDx] = useState(0);
-  const [dy, setDy] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const start = useRef({ px: 0, py: 0, dx: 0, dy: 0 });
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  const onPD = (e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDragging(true);
-    start.current = { px: e.clientX, py: e.clientY, dx, dy };
-  };
-  const onPM = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    setDx(start.current.dx + e.clientX - start.current.px);
-    setDy(start.current.dy + e.clientY - start.current.py);
-  };
-  const onPU = () => {
-    setDragging(false);
-    const wrap = wrapRef.current;
-    const slot = slotRef.current;
-    if (wrap && slot) {
-      const wR = wrap.getBoundingClientRect();
-      const sR = slot.getBoundingClientRect();
-      const dist = Math.hypot(
-        (wR.left + wR.width / 2) - (sR.left + sR.width / 2),
-        (wR.top  + wR.height / 2) - (sR.top  + sR.height / 2)
-      );
-      if (dist < 62) { onInsert(); return; }
-    }
-    setDx(0); setDy(0);
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-      {/* Instruction */}
-      <div style={{
-        fontFamily: "var(--font-mundial)", fontSize: 9, color: "rgba(255,224,72,0.5)",
-        letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "center",
-        whiteSpace: "nowrap",
-      }}>
-        DRAG TO SLOT →
-      </div>
-
-      {/* Positioning wrapper */}
-      <div ref={wrapRef}
-        style={{
-          transform: `translate(${dx}px,${dy}px)`,
-          transition: dragging ? "none" : "transform 0.45s cubic-bezier(0.34,1.56,0.64,1)",
-          position: "relative", zIndex: 30,
-        }}
-      >
-        {/* Visual coin (wobble separately) */}
-        <div
-          onPointerDown={onPD}
-          onPointerMove={onPM}
-          onPointerUp={onPU}
-          onPointerCancel={onPU}
-          className={dragging ? "" : "coin-idle"}
-          style={{
-            width: 70, height: 70, borderRadius: "50%",
-            background: "conic-gradient(from 0deg,#7a5c0a,#FFE048,#FFD700,#FFA500,#FFD700,#FFE048,#9a7210,#FFE048,#7a5c0a)",
-            boxShadow: "0 0 22px rgba(255,224,72,0.7),0 0 44px rgba(255,224,72,0.25),inset 0 3px 8px rgba(255,255,255,0.35),inset 0 -3px 8px rgba(0,0,0,0.4)",
-            border: "3px solid rgba(255,224,72,0.9)",
-            cursor: dragging ? "grabbing" : "grab",
-            touchAction: "none", userSelect: "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/shaka.png" alt="coin" style={{ width: 38, height: 38, pointerEvents: "none", filter: "drop-shadow(0 0 6px rgba(0,0,0,0.6))" }}/>
-        </div>
-      </div>
+      width:44, height:62, borderRadius:7, position:"relative", overflow:"hidden",
+      background:TIER_BG[tier],
+      border:`1.5px solid ${tc}${grabbed?"00":"99"}`,
+      boxShadow:`0 0 14px ${tg}, 0 4px 14px rgba(0,0,0,0.7)`,
+      opacity: grabbed ? 0 : 1,
+      transition:"opacity 0.2s, border-color 0.2s",
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3,
+    }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/shaka.png" alt="" style={{ width:20,height:20,filter:`drop-shadow(0 0 4px ${tg})` }}/>
+      <div style={{ fontFamily:"var(--font-brice)",fontSize:7,fontWeight:900,color:tc,textTransform:"uppercase",letterSpacing:"0.1em",lineHeight:1,textAlign:"center" }}>GVC</div>
+      <div className="holo" style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(255,0,128,0.25),rgba(0,255,148,0.18),rgba(0,191,255,0.25))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
+      {/* Shine */}
+      <div style={{ position:"absolute",top:0,width:"30%",height:"100%",background:"linear-gradient(108deg,transparent,rgba(255,255,255,0.15),transparent)",animation:"shine 3s ease-in-out infinite",pointerEvents:"none" }}/>
     </div>
   );
 }
 
-// ─── GLOSSY PACK ─────────────────────────────────────────────────────────────
-function GlossyPack({ tier, w = 140, floating = false }: { tier: Tier; w?: number; floating?: boolean }) {
-  const h = w * 1.48;
-  const tc = TIER_COLOR[tier];
-  const tg = TIER_GLOW[tier];
-
+// ─── CLAW ARM ─────────────────────────────────────────────────────────────────
+function ClawArm({ x, armPx, closed, hasPack, packTier }: { x:number; armPx:number; closed:boolean; hasPack:boolean; packTier:Tier }) {
   return (
-    <div
-      className={floating ? "pack-float" : ""}
-      style={{
-        width: w, height: h, borderRadius: 12, position: "relative", overflow: "hidden", flexShrink: 0,
-        background: TIER_BG[tier],
-        border: `1.5px solid ${tc}bb`,
-        boxShadow: `0 0 30px ${tg},0 10px 50px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.14)`,
-      }}
-    >
-      {/* Holographic foil */}
-      <div className="holo" style={{
-        position: "absolute", inset: 0, zIndex: 4, borderRadius: 12,
-        background: "linear-gradient(135deg,rgba(255,0,128,0.28) 0%,rgba(255,140,0,0.18) 18%,rgba(255,225,0,0.24) 36%,rgba(0,255,148,0.18) 54%,rgba(0,191,255,0.24) 72%,rgba(191,0,255,0.18) 90%,rgba(255,0,128,0.28) 100%)",
-        mixBlendMode: "color-dodge", pointerEvents: "none",
-      }}/>
+    <div style={{ position:"absolute", left:`${x}%`, top:0, transform:"translateX(-50%)", zIndex:12, display:"flex", flexDirection:"column", alignItems:"center", pointerEvents:"none" }}>
+      {/* Trolley block */}
+      <div style={{ width:28,height:13,borderRadius:"5px 5px 0 0",background:"linear-gradient(180deg,#e8e8e8,#a0a0a0)",boxShadow:"0 2px 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.6)" }}/>
+      {/* Cable */}
+      <motion.div animate={{ height: armPx }} transition={{ duration:0.7, ease:"easeInOut" }}
+        style={{ width:3, background:"linear-gradient(180deg,#bbb,#666)", boxShadow:"1px 0 3px rgba(0,0,0,0.4)", minHeight:0 }}/>
+      {/* Claw housing */}
+      <div style={{ width:26,height:12,background:"linear-gradient(180deg,#d4d4d4,#8a8a8a)",borderRadius:"3px 3px 0 0",boxShadow:"0 2px 6px rgba(0,0,0,0.5)" }}/>
+      {/* Three prongs */}
+      <div style={{ display:"flex", gap:2, alignItems:"flex-start" }}>
+        <div style={{ width:6,height:20,background:"linear-gradient(180deg,#c8c8c8,#686868)",borderRadius:"0 0 4px 4px",transform:`rotate(${closed?-10:-42}deg)`,transformOrigin:"top center",transition:"transform 0.28s ease",boxShadow:"2px 2px 4px rgba(0,0,0,0.4)" }}/>
+        <div style={{ width:6,height:26,background:"linear-gradient(180deg,#c8c8c8,#686868)",borderRadius:"0 0 4px 4px",boxShadow:"0 2px 4px rgba(0,0,0,0.35)" }}/>
+        <div style={{ width:6,height:20,background:"linear-gradient(180deg,#c8c8c8,#686868)",borderRadius:"0 0 4px 4px",transform:`rotate(${closed?10:42}deg)`,transformOrigin:"top center",transition:"transform 0.28s ease",boxShadow:"-2px 2px 4px rgba(0,0,0,0.4)" }}/>
+      </div>
+      {/* Pack when grabbed */}
+      {hasPack && closed && <div style={{ marginTop:3 }}><MiniPack tier={packTier} grabbed={false}/></div>}
+    </div>
+  );
+}
 
-      {/* Gloss */}
-      <div style={{
-        position: "absolute", top: 0, left: "12%", width: "55%", height: "100%",
-        background: "linear-gradient(108deg,transparent 38%,rgba(255,255,255,0.09) 50%,transparent 62%)",
-        zIndex: 5, pointerEvents: "none",
-      }}/>
-
-      {/* Shine sweep */}
-      <div style={{
-        position: "absolute", top: 0, width: "28%", height: "100%",
-        background: "linear-gradient(108deg,transparent,rgba(255,255,255,0.13),transparent)",
-        animation: "packShine 3.5s ease-in-out infinite",
-        zIndex: 6, pointerEvents: "none",
-      }}/>
-
-      {/* Content */}
-      <div style={{
-        position: "absolute", inset: 0, zIndex: 3,
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "space-between", padding: `${h * 0.055}px ${w * 0.09}px`,
-      }}>
-        {/* Top ribbon */}
-        <div style={{
-          alignSelf: "stretch", textAlign: "center",
-          borderBottom: `1px solid ${tc}44`, paddingBottom: h * 0.02,
-          fontFamily: "'Courier New',monospace", fontSize: w * 0.07,
-          color: tc, letterSpacing: "0.15em", textTransform: "uppercase",
-          textShadow: `0 0 12px ${tg}`,
-        }}>
-          {tier === "Legendary" ? "✦ LEGENDARY ✦" : tier === "Rare" ? "◆ RARE ◆" : "STANDARD"}
+// ─── FULL SIZE GLOSSY PACK ────────────────────────────────────────────────────
+function GlossyPack({ tier, w=200 }: { tier:Tier; w?:number }) {
+  const h=w*1.5, tc=TIER_COLOR[tier], tg=TIER_GLOW[tier];
+  return (
+    <div style={{ width:w,height:h,borderRadius:14,position:"relative",overflow:"hidden",flexShrink:0,
+      background:TIER_BG[tier],
+      border:`2px solid ${tc}cc`,
+      boxShadow:`0 0 40px ${tg},0 12px 50px rgba(0,0,0,0.85),inset 0 1px 0 rgba(255,255,255,0.15)` }}>
+      <div className="holo" style={{ position:"absolute",inset:0,zIndex:4,background:"linear-gradient(135deg,rgba(255,0,128,0.3),rgba(255,140,0,0.2),rgba(255,225,0,0.28),rgba(0,255,148,0.2),rgba(0,191,255,0.28),rgba(191,0,255,0.2),rgba(255,0,128,0.3))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
+      <div style={{ position:"absolute",top:0,left:"10%",width:"55%",height:"100%",background:"linear-gradient(108deg,transparent 40%,rgba(255,255,255,0.09) 50%,transparent 60%)",zIndex:5,pointerEvents:"none" }}/>
+      <div style={{ position:"absolute",top:0,width:"28%",height:"100%",background:"linear-gradient(108deg,transparent,rgba(255,255,255,0.14),transparent)",animation:"shine 4s ease-in-out infinite",zIndex:6,pointerEvents:"none" }}/>
+      <div style={{ position:"absolute",inset:0,zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"space-between",padding:`${h*.055}px ${w*.1}px` }}>
+        <div style={{ alignSelf:"stretch",textAlign:"center",borderBottom:`1px solid ${tc}44`,paddingBottom:h*.022,fontFamily:"'Courier New',monospace",fontSize:w*.075,color:tc,letterSpacing:"0.14em",textTransform:"uppercase",textShadow:`0 0 14px ${tg}` }}>
+          {tier==="Legendary"?"✦ LEGENDARY ✦":tier==="Rare"?"◆ RARE ◆":"STANDARD"}
         </div>
-
-        {/* Shaka + brand */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: h * 0.025 }}>
+        <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:h*.025 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/shaka.png" alt="" style={{
-            width: w * 0.46, height: w * 0.46,
-            filter: `drop-shadow(0 0 ${w * 0.07}px ${tg})`,
-          }}/>
-          <div style={{
-            fontFamily: "var(--font-brice)", fontSize: w * 0.13, fontWeight: 900, lineHeight: 1.05,
-            color: tc, textTransform: "uppercase", letterSpacing: "0.09em",
-            textShadow: `0 0 18px ${tg}`, textAlign: "center",
-          }}>
+          <img src="/shaka.png" alt="" style={{ width:w*.48,height:w*.48,filter:`drop-shadow(0 0 ${w*.07}px ${tg})` }}/>
+          <div style={{ fontFamily:"var(--font-brice)",fontSize:w*.13,fontWeight:900,lineHeight:1.05,color:tc,textTransform:"uppercase",letterSpacing:"0.09em",textShadow:`0 0 20px ${tg}`,textAlign:"center" }}>
             GOOD<br/>VIBES<br/>CLUB
           </div>
         </div>
-
-        {/* Bottom */}
-        <div style={{
-          alignSelf: "stretch", textAlign: "center",
-          borderTop: `1px solid ${tc}33`, paddingTop: h * 0.02,
-          fontFamily: "'Courier New',monospace", fontSize: w * 0.065,
-          color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em",
-        }}>
+        <div style={{ alignSelf:"stretch",textAlign:"center",borderTop:`1px solid ${tc}33`,paddingTop:h*.022,fontFamily:"'Courier New',monospace",fontSize:w*.065,color:"rgba(255,255,255,0.3)",letterSpacing:"0.1em" }}>
           COLLECTOR · S1
         </div>
       </div>
-
-      {/* Perforation / tear line at 22% from top */}
-      <div style={{
-        position: "absolute", left: 0, right: 0, top: "22%", height: 2, zIndex: 7, pointerEvents: "none",
-        background: `repeating-linear-gradient(90deg,${tc}70 0,${tc}70 5px,transparent 5px,transparent 10px)`,
-        boxShadow: `0 0 5px ${tg}`,
-      }}/>
-      {/* Notch */}
-      <div style={{
-        position: "absolute", left: -1, top: "calc(22% - 5px)",
-        width: 9, height: 12, zIndex: 8, background: "#050505",
-        clipPath: "polygon(0 50%,100% 0,100% 100%)",
-      }}/>
+      {/* Tear line */}
+      <div style={{ position:"absolute",left:0,right:0,top:"20%",height:2,zIndex:7,pointerEvents:"none",background:`repeating-linear-gradient(90deg,${tc}70 0,${tc}70 5px,transparent 5px,transparent 10px)`,boxShadow:`0 0 5px ${tg}` }}/>
+      <div style={{ position:"absolute",left:-1,top:"calc(20% - 5px)",width:9,height:12,zIndex:8,background:"#050505",clipPath:"polygon(0 50%,100% 0,100% 100%)" }}/>
     </div>
   );
 }
 
-// ─── PACK TEAR SEQUENCE ───────────────────────────────────────────────────────
-function PackTearSequence({ tier, onComplete }: { tier: Tier; onComplete: () => void }) {
-  const [dragX, setDragX] = useState(0);
-  const [live,  setLive]  = useState(false);
-  const [done,  setDone]  = useState(false);
-  const startX = useRef(0);
-  const THRESHOLD = 190;
-  const progress  = Math.min(dragX / THRESHOLD, 1);
+// ─── PACK TEAR ────────────────────────────────────────────────────────────────
+function PackTear({ tier, onComplete }: { tier:Tier; onComplete:()=>void }) {
+  const [dx,setDx]=useState(0), [live,setLive]=useState(false), [done,setDone]=useState(false);
+  const sx=useRef(0), THRESH=180;
+  const prog=Math.min(dx/THRESH,1);
+  const W=typeof window!=="undefined"?Math.min(230,window.innerWidth*.65):210;
+  const H=W*1.5, TEAR=H*.2;
+  const tc=TIER_COLOR[tier], tg=TIER_GLOW[tier];
 
-  const W = typeof window !== "undefined" ? Math.min(240, window.innerWidth * 0.68) : 220;
-  const H = W * 1.48;
-  const TEAR_Y = H * 0.22;
-  const tc = TIER_COLOR[tier];
-  const tg = TIER_GLOW[tier];
-
-  const onPD = (e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setLive(true);
-    startX.current = e.clientX - dragX;
-  };
-  const onPM = (e: React.PointerEvent) => {
-    if (!live) return;
-    setDragX(Math.max(0, Math.min(e.clientX - startX.current, THRESHOLD + 50)));
-  };
-  const onPU = () => {
-    setLive(false);
-    if (progress > 0.62) {
-      setDragX(THRESHOLD);
-      setDone(true);
-      sfxTear();
-      setTimeout(onComplete, 650);
-    } else {
-      setDragX(0);
-    }
-  };
+  const pd=(e:React.PointerEvent)=>{ e.preventDefault();(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);setLive(true);sx.current=e.clientX-dx; };
+  const pm=(e:React.PointerEvent)=>{ if(!live)return; setDx(Math.max(0,Math.min(e.clientX-sx.current,THRESH+40))); };
+  const pu=()=>{ setLive(false); if(prog>.62){ setDx(THRESH);setDone(true);sfxTear();setTimeout(onComplete,600); } else setDx(0); };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
-      <motion.p
-        animate={{ opacity: [0.5,1,0.5] }}
-        transition={{ duration: 1.2, repeat: Infinity }}
-        style={{
-          fontFamily: "var(--font-brice)", fontSize: 13, margin: 0,
-          color: "rgba(255,255,255,0.45)", letterSpacing: "0.18em", textTransform: "uppercase",
-          opacity: done ? 0 : 1, transition: "opacity 0.3s",
-        }}
-      >
-        ← DRAG TO TEAR OPEN →
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:16 }}>
+      <motion.p animate={{ opacity:[.45,1,.45] }} transition={{ duration:1.3,repeat:Infinity }}
+        style={{ fontFamily:"var(--font-brice)",fontSize:13,margin:0,color:"rgba(255,255,255,0.45)",letterSpacing:"0.18em",textTransform:"uppercase",opacity:done?0:1,transition:"opacity .3s" }}>
+        ← DRAG TO TEAR →
       </motion.p>
-
-      {/* Pack container */}
-      <div
-        onPointerDown={onPD}
-        onPointerMove={onPM}
-        onPointerUp={onPU}
-        onPointerCancel={onPU}
-        style={{ position: "relative", width: W, height: H, cursor: "ew-resize", touchAction: "none", userSelect: "none" }}
-      >
-        {/* BODY (bottom stays) */}
-        <div style={{
-          position: "absolute", top: TEAR_Y, left: 0, right: 0, bottom: 0,
-          borderRadius: "0 0 12px 12px",
-          background: TIER_BG[tier],
-          border: `1.5px solid ${tc}aa`, borderTop: "none",
-          overflow: "hidden",
-        }}>
-          {/* Light burst from tear */}
-          <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, height: 80,
-            background: `radial-gradient(ellipse at 50% 0%,${tc} 0%,transparent 70%)`,
-            opacity: progress * 0.85,
-          }}/>
-          {/* Body content */}
-          <div style={{
-            position: "absolute", inset: 0, display: "flex",
-            flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
-          }}>
+      <div onPointerDown={pd} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pu}
+        style={{ position:"relative",width:W,height:H,cursor:"ew-resize",touchAction:"none",userSelect:"none" }}>
+        {/* body */}
+        <div style={{ position:"absolute",top:TEAR,left:0,right:0,bottom:0,borderRadius:"0 0 14px 14px",background:TIER_BG[tier],border:`2px solid ${tc}aa`,borderTop:"none",overflow:"hidden" }}>
+          <div style={{ position:"absolute",top:0,left:0,right:0,height:70,background:`radial-gradient(ellipse at 50% 0%,${tc} 0%,transparent 72%)`,opacity:prog*.9 }}/>
+          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/shaka.png" alt="" style={{ width: W * 0.38, height: W * 0.38, opacity: 0.55, filter: `drop-shadow(0 0 10px ${tg})` }}/>
-            <div style={{ fontFamily: "var(--font-brice)", fontSize: W * 0.1, fontWeight: 900, color: tc, textTransform: "uppercase", letterSpacing: "0.08em", textAlign: "center", lineHeight: 1.15, textShadow: `0 0 16px ${tg}` }}>
-              GOOD<br/>VIBES<br/>CLUB
-            </div>
+            <img src="/shaka.png" alt="" style={{ width:W*.38,height:W*.38,opacity:.55,filter:`drop-shadow(0 0 10px ${tg})` }}/>
+            <div style={{ fontFamily:"var(--font-brice)",fontSize:W*.1,fontWeight:900,color:tc,textTransform:"uppercase",textAlign:"center",lineHeight:1.15,textShadow:`0 0 16px ${tg}` }}>GOOD<br/>VIBES<br/>CLUB</div>
           </div>
-          {/* Holo */}
-          <div className="holo" style={{
-            position: "absolute", inset: 0,
-            background: "linear-gradient(135deg,rgba(255,0,128,0.2),rgba(0,255,148,0.14),rgba(0,191,255,0.2),rgba(191,0,255,0.14))",
-            mixBlendMode: "color-dodge", pointerEvents: "none",
-          }}/>
+          <div className="holo" style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(255,0,128,0.2),rgba(0,255,148,0.14),rgba(0,191,255,0.2))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
         </div>
-
-        {/* TOP FLAP (peels off) */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: TEAR_Y,
-          borderRadius: "12px 12px 0 0",
-          background: tier === "Legendary"
-            ? "linear-gradient(160deg,#3a2c00,#1c1400)"
-            : tier === "Rare"
-            ? "linear-gradient(160deg,#2d1550,#120a24)"
-            : "linear-gradient(160deg,#1a2e50,#0b1422)",
-          border: `1.5px solid ${tc}cc`, borderBottom: "none",
-          overflow: "hidden",
-          transform: `translateX(${progress * 300}px) rotate(${progress * 26}deg)`,
-          transformOrigin: "left center",
-          opacity: 1 - progress * 0.8,
-          transition: live ? "none" : "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s",
-          pointerEvents: "none",
-        }}>
-          <div style={{
-            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "'Courier New',monospace", fontSize: W * 0.08,
-            color: tc, letterSpacing: "0.14em",
-            textShadow: `0 0 10px ${tg}`,
-          }}>
-            {tier === "Legendary" ? "✦ TEAR ✦" : "← TEAR →"}
-          </div>
-          <div className="holo" style={{
-            position: "absolute", inset: 0,
-            background: "linear-gradient(135deg,rgba(255,0,128,0.3),rgba(0,255,148,0.2),rgba(0,191,255,0.3))",
-            mixBlendMode: "color-dodge", pointerEvents: "none",
-          }}/>
+        {/* flap */}
+        <div style={{ position:"absolute",top:0,left:0,right:0,height:TEAR,borderRadius:"14px 14px 0 0",background:tier==="Legendary"?"linear-gradient(160deg,#3a2c00,#1c1400)":tier==="Rare"?"linear-gradient(160deg,#2d1250,#120a24)":"linear-gradient(160deg,#1a3050,#0b1a22)",border:`2px solid ${tc}bb`,borderBottom:"none",overflow:"hidden",transform:`translateX(${prog*300}px) rotate(${prog*26}deg)`,transformOrigin:"left center",opacity:1-prog*.8,transition:live?"none":"transform .35s cubic-bezier(.34,1.56,.64,1),opacity .35s",pointerEvents:"none" }}>
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:W*.08,color:tc,letterSpacing:"0.14em",textShadow:`0 0 10px ${tg}` }}>{tier==="Legendary"?"✦ TEAR ✦":"← TEAR →"}</div>
+          <div className="holo" style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(255,0,128,0.3),rgba(0,255,148,0.2),rgba(0,191,255,0.3))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
         </div>
-
-        {/* Progress bar */}
-        {!done && (
-          <div style={{ position: "absolute", bottom: -16, left: 0, right: 0, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
-            <div style={{
-              height: "100%", width: `${progress * 100}%`,
-              background: `linear-gradient(90deg,${tc},${tg})`,
-              borderRadius: 2, boxShadow: `0 0 8px ${tg}`,
-              transition: live ? "none" : "width 0.3s",
-            }}/>
-          </div>
-        )}
+        {!done&&<div style={{ position:"absolute",bottom:-14,left:0,right:0,height:3,background:"rgba(255,255,255,0.06)",borderRadius:2 }}><div style={{ height:"100%",width:`${prog*100}%`,background:`linear-gradient(90deg,${tc},${tg})`,borderRadius:2,boxShadow:`0 0 8px ${tg}`,transition:live?"none":"width .3s" }}/></div>}
       </div>
-    </div>
-  );
-}
-
-// ─── KEYPAD ────────────────────────────────────────────────────────────────────
-function Keypad({ value, onChange, onVend, canVend }: {
-  value: string; onChange: (v: string) => void; onVend: () => void; canVend: boolean;
-}) {
-  const keys = ["1","2","3","4","5","6","7","8","9","CLR","0","RND"];
-  const press = (k: string) => {
-    sfxKey();
-    if (k === "CLR") { onChange(""); return; }
-    if (k === "RND") { onChange(String(Math.floor(Math.random() * 6969))); return; }
-    if (value.length >= 4) return;
-    onChange(value + k);
-  };
-  return (
-    <div style={{ padding: "10px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
-      {/* LCD display */}
-      <div style={{
-        background: "#001500", border: "1px solid rgba(46,255,46,0.45)",
-        borderRadius: 6, padding: "6px 12px",
-        fontFamily: "'Courier New',monospace", fontSize: 17, fontWeight: "bold",
-        color: "#2EFF2E", letterSpacing: "0.22em", textAlign: "center",
-        textShadow: "0 0 12px rgba(46,255,46,0.9)",
-        boxShadow: "inset 0 0 14px rgba(46,255,46,0.1)",
-        minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        {value ? `# ${value.padStart(4,"0")}` : "_ _ _ _"}
-      </div>
-
-      {/* Keys */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4 }}>
-        {keys.map(k => {
-          const isSpec = k === "CLR" || k === "RND";
-          const kColor = k === "CLR" ? "rgba(255,70,70,0.75)" : k === "RND" ? GOLD : "rgba(255,255,255,0.72)";
-          return (
-            <motion.button key={k}
-              onClick={() => press(k)}
-              whileTap={{ scale: 0.86, y: 1 }}
-              style={{
-                height: 33, borderRadius: 5, cursor: "pointer",
-                background: k === "CLR" ? "rgba(255,50,50,0.1)" : k === "RND" ? "rgba(255,224,72,0.1)" : "rgba(255,255,255,0.05)",
-                border: `1px solid ${k === "CLR" ? "rgba(255,70,70,0.3)" : k === "RND" ? "rgba(255,224,72,0.32)" : "rgba(255,255,255,0.1)"}`,
-                color: kColor, fontFamily: isSpec ? "var(--font-mundial)" : "'Courier New',monospace",
-                fontSize: isSpec ? 9 : 15, letterSpacing: isSpec ? "0.04em" : "0.08em",
-                boxShadow: "0 2px 0 rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.05)",
-              }}
-            >{k}</motion.button>
-          );
-        })}
-      </div>
-
-      {/* VEND button */}
-      <motion.button
-        onClick={onVend}
-        disabled={!canVend}
-        animate={canVend ? { boxShadow: ["0 0 10px rgba(255,224,72,0.28)","0 0 26px rgba(255,224,72,0.68)","0 0 10px rgba(255,224,72,0.28)"] } : {}}
-        transition={{ boxShadow: { duration: 1.5, repeat: Infinity } }}
-        whileTap={canVend ? { scale: 0.95 } : {}}
-        style={{
-          height: 42, borderRadius: 8, marginTop: 2, cursor: canVend ? "pointer" : "default",
-          background: canVend ? "linear-gradient(135deg,#FFE048,#FFD700,#FFAA00)" : "rgba(255,224,72,0.06)",
-          border: `1.5px solid ${canVend ? "rgba(255,224,72,0.85)" : "rgba(255,224,72,0.18)"}`,
-          color: canVend ? "#050505" : "rgba(255,224,72,0.28)",
-          fontFamily: "var(--font-brice)", fontSize: 15, fontWeight: 900,
-          letterSpacing: "0.12em", textTransform: "uppercase",
-          transition: "background 0.3s,color 0.3s,border-color 0.3s",
-          boxShadow: canVend ? "0 4px 0 rgba(160,120,0,0.5),inset 0 1px 0 rgba(255,255,255,0.28)" : "none",
-        }}
-      >
-        🎰 VEND
-      </motion.button>
-    </div>
-  );
-}
-
-// ─── TIER BURST ───────────────────────────────────────────────────────────────
-function TierBurst({ tier }: { tier: Tier }) {
-  const c = TIER_COLOR[tier];
-  return (
-    <div style={{ position:"fixed",inset:0,pointerEvents:"none",zIndex:60,overflow:"hidden" }}>
-      {Array.from({ length: 32 }, (_,i) => {
-        const a = (i / 32) * 360;
-        const d = 160 + Math.random() * 240;
-        return (
-          <motion.div key={i}
-            initial={{ x:"50vw",y:"50vh",scale:0,opacity:1 }}
-            animate={{ x:`calc(50vw + ${Math.cos(a*Math.PI/180)*d}px)`,y:`calc(50vh + ${Math.sin(a*Math.PI/180)*d}px)`,scale:[0,1.5,0.7],opacity:[1,1,0] }}
-            transition={{ duration:1.2,ease:"easeOut",delay:i*0.011 }}
-            style={{ position:"absolute",width:7,height:7,borderRadius:"50%",background:c,boxShadow:`0 0 12px ${c},0 0 24px ${c}` }}
-          />
-        );
-      })}
     </div>
   );
 }
 
 // ─── VIBE CARD ────────────────────────────────────────────────────────────────
-function VibeCard3D({ tokenId, cardData }: { tokenId: number; cardData: CardData }) {
-  const [flipped, setFlipped] = useState(false);
-  const [tx, setTx] = useState(0);
-  const [ty, setTy] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-  const isTouchRef = useRef(false);
+function VibeCard({ tokenId, card, onShare, onDownload, onReset }: { tokenId:number; card:CardData; onShare:()=>void; onDownload:()=>void; onReset:()=>void }) {
+  const [flipped,setFlipped]=useState(false);
+  const [tx,setTx]=useState(0), [ty,setTy]=useState(0);
+  const ref=useRef<HTMLDivElement>(null);
+  const isTouch=useRef(false);
+  useEffect(()=>{ isTouch.current=window.matchMedia("(hover:none)").matches; },[]);
 
-  useEffect(() => {
-    isTouchRef.current = window.matchMedia("(hover: none)").matches;
-  }, []);
+  const W=typeof window!=="undefined"?Math.min(300,window.innerWidth*.82):290;
+  const H=W*1.42;
+  const tc=TIER_COLOR[card.tier], tg=TIER_GLOW[card.tier];
 
-  const W = typeof window !== "undefined" ? Math.min(300, window.innerWidth * 0.82) : 290;
-  const H = W * 1.42;
-  const tc = TIER_COLOR[cardData.tier];
-  const tg = TIER_GLOW[cardData.tier];
-
-  const onMove = (e: React.MouseEvent) => {
-    if (isTouchRef.current || flipped) return;
-    const r = ref.current?.getBoundingClientRect();
-    if (!r) return;
-    setTx(((e.clientY - r.top - r.height/2) / (r.height/2)) * -11);
-    setTy(((e.clientX - r.left - r.width/2) / (r.width/2)) * 11);
+  const onMove=(e:React.MouseEvent)=>{
+    if(isTouch.current||flipped)return;
+    const r=ref.current?.getBoundingClientRect(); if(!r)return;
+    setTx(((e.clientY-r.top-r.height/2)/(r.height/2))*-10);
+    setTy(((e.clientX-r.left-r.width/2)/(r.width/2))*10);
   };
-  const onLeave = () => { setTx(0); setTy(0); };
-
-  const statRow = (label: string, val: number, color: string) => (
-    <div key={label} style={{ flex:1, display:"flex", flexDirection:"column", gap:2 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-        <span style={{ fontFamily:"var(--font-mundial)", fontSize:W*0.026, color:"rgba(255,255,255,0.34)", letterSpacing:"0.1em", textTransform:"uppercase" }}>{label}</span>
-        <span style={{ fontFamily:"var(--font-brice)", fontSize:W*0.055, fontWeight:900, color, textShadow: val>=80?`0 0 10px ${color}`:"none" }}>{val}</span>
-      </div>
-      <div style={{ height:3, background:"rgba(255,255,255,0.07)", borderRadius:2, overflow:"hidden" }}>
-        <motion.div
-          initial={{ width:0 }}
-          animate={{ width:`${val}%` }}
-          transition={{ duration:1.3, ease:"easeOut", delay:0.45 }}
-          style={{ height:"100%", borderRadius:2, background:`linear-gradient(90deg,${color}80,${color})`, boxShadow:val>=80?`0 0 6px ${color}`:"none" }}
-        />
-      </div>
-    </div>
-  );
 
   return (
-    <div style={{ perspective:1200 }}>
-      <motion.div ref={ref}
-        onClick={() => setFlipped(f => !f)}
-        onMouseMove={onMove}
-        onMouseLeave={onLeave}
-        animate={{ rotateY:flipped?180:ty, rotateX:flipped?0:tx }}
-        transition={{ type:"spring", stiffness:190, damping:24 }}
-        className="card-rotator"
-        style={{ width:W, height:H, position:"relative", cursor:"pointer" }}
-      >
-        {/* ── FRONT ── */}
-        <div className="card-face" style={{
-          position:"absolute", inset:0, borderRadius:18,
-          background:"linear-gradient(160deg,#080810 0%,#0c0c1c 55%,#060610 100%)",
-          border:`2px solid ${tc}`,
-          boxShadow:`0 0 0 1px ${tc}22,0 0 50px ${tg},0 28px 70px rgba(0,0,0,0.85),inset 0 1px 0 rgba(255,255,255,0.1)`,
-          overflow:"hidden",
-        }}>
-          {/* Holographic foil */}
-          <div className="holo" style={{
-            position:"absolute", inset:0, zIndex:10,
-            background:"linear-gradient(135deg,rgba(255,0,128,0.14) 0%,rgba(255,140,0,0.1) 18%,rgba(255,225,0,0.14) 36%,rgba(0,255,148,0.1) 54%,rgba(0,191,255,0.14) 72%,rgba(191,0,255,0.1) 90%,rgba(255,0,128,0.14) 100%)",
-            mixBlendMode:"color-dodge", pointerEvents:"none",
-          }}/>
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:18 }}>
+      {/* ── GRADIENT BORDER WRAPPER ── */}
+      <div className="border-spin" style={{ padding:2,borderRadius:20,background:"linear-gradient(45deg,#ff0080,#ff6600,#ffe100,#00ff94,#00bfff,#bf00ff,#ff0080)",backgroundSize:"300% 300%" }}>
+        <div style={{ perspective:1100 }}>
+          <motion.div ref={ref}
+            onClick={()=>setFlipped(f=>!f)}
+            onMouseMove={onMove}
+            onMouseLeave={()=>{ setTx(0);setTy(0); }}
+            animate={{ rotateY:flipped?180:ty, rotateX:flipped?0:tx }}
+            transition={{ type:"spring",stiffness:180,damping:22 }}
+            className="card-rotator"
+            style={{ width:W,height:H,position:"relative",cursor:"pointer" }}
+          >
+            {/* FRONT */}
+            <div className="card-face" style={{ position:"absolute",inset:0,borderRadius:18,overflow:"hidden",background:TIER_BG[card.tier] }}>
+              {/* Holo foil */}
+              <div className="holo" style={{ position:"absolute",inset:0,zIndex:10,background:"linear-gradient(135deg,rgba(255,0,128,0.18),rgba(255,140,0,0.12),rgba(255,225,0,0.18),rgba(0,255,148,0.12),rgba(0,191,255,0.18),rgba(191,0,255,0.12),rgba(255,0,128,0.18))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
 
-          {/* Portrait */}
-          <div style={{ position:"absolute", top:0, left:0, right:0, height:"60%", overflow:"hidden" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/portrait/${tokenId}`} alt={`GVC #${tokenId}`}
-              style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top" }}
-            />
-            {/* Vignette */}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom,rgba(0,0,0,0.08) 0%,transparent 35%,rgba(6,6,16,0.97) 100%)" }}/>
-            {/* Top HUD */}
-            <div style={{
-              position:"absolute", top:0, left:0, right:0,
-              display:"flex", justifyContent:"space-between", alignItems:"center",
-              padding:`${W*0.04}px ${W*0.05}px`,
-              background:"linear-gradient(to bottom,rgba(0,0,0,0.65),transparent)",
-            }}>
-              <span style={{ fontFamily:"var(--font-mundial)", fontSize:W*0.034, color:"rgba(255,255,255,0.68)" }}>GVC #{tokenId}</span>
-              <div style={{
-                padding:`${W*0.014}px ${W*0.04}px`, borderRadius:5,
-                background:`${tc}22`, border:`1px solid ${tc}99`,
-                fontFamily:"var(--font-brice)", fontSize:W*0.034, fontWeight:900,
-                color:tc, textTransform:"uppercase", letterSpacing:"0.07em",
-                textShadow:`0 0 10px ${tg}`,
-              }}>{cardData.tier}</div>
-            </div>
-          </div>
-
-          {/* Bottom panel */}
-          <div style={{
-            position:"absolute", bottom:0, left:0, right:0,
-            padding:`${H*0.022}px ${W*0.055}px ${H*0.028}px`,
-            display:"flex", flexDirection:"column", gap:H*0.014,
-          }}>
-            {/* Badges */}
-            {cardData.badges.length > 0 && (
-              <div style={{ display:"flex", gap:5, marginBottom:2 }}>
-                {cardData.badges.map(b => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={b} src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b}
-                    style={{ width:W*0.1, height:W*0.1, borderRadius:6, border:`1px solid rgba(255,224,72,0.28)` }}
-                    onError={e => { (e.target as HTMLImageElement).style.display="none"; }}
-                  />
-                ))}
+              {/* Portrait */}
+              <div style={{ position:"absolute",top:0,left:0,right:0,height:"58%",overflow:"hidden" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/portrait/${tokenId}`} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top" }}/>
+                <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,transparent 30%,rgba(0,0,0,0.92) 100%)" }}/>
+                {/* Token badge */}
+                <div style={{ position:"absolute",top:10,left:10,right:10,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <div style={{ background:"rgba(0,0,0,0.55)",backdropFilter:"blur(4px)",borderRadius:6,padding:"3px 8px",fontFamily:"var(--font-mundial)",fontSize:W*.032,color:"rgba(255,255,255,0.75)" }}>GVC #{tokenId}</div>
+                  <div style={{ background:`${tc}22`,border:`1.5px solid ${tc}`,borderRadius:6,padding:"3px 10px",fontFamily:"var(--font-brice)",fontSize:W*.034,fontWeight:900,color:tc,textTransform:"uppercase",letterSpacing:"0.07em",textShadow:`0 0 10px ${tg}` }}>{card.tier}</div>
+                </div>
               </div>
-            )}
-            {/* Archetype */}
-            <div style={{
-              fontFamily:"var(--font-brice)", fontSize:W*0.068, fontWeight:900,
-              color:tc, textTransform:"uppercase", letterSpacing:"0.04em",
-              textShadow:`0 0 22px ${tg}`, lineHeight:1.1,
-            }}>{cardData.archetype}</div>
-            {/* Quote */}
-            <div style={{
-              fontFamily:"var(--font-mundial)", fontSize:W*0.034,
-              color:"rgba(255,255,255,0.36)", fontStyle:"italic", lineHeight:1.4,
-            }}>"{cardData.quote}"</div>
-            {/* Stats */}
-            <div style={{ display:"flex", gap:W*0.022, marginTop:3 }}>
-              {statRow("RARITY", cardData.rarity, tc)}
-              {statRow("DRIP",   cardData.drip,   "#FF6B9D")}
-              {statRow("ENERGY", cardData.energy, "#00bfff")}
-              {statRow("AURA",   cardData.aura,   "#00ff94")}
-            </div>
-            {/* Rank */}
-            <div style={{
-              textAlign:"center", fontFamily:"var(--font-mundial)", fontSize:W*0.028,
-              color:"rgba(255,255,255,0.2)", letterSpacing:"0.1em",
-            }}>
-              RANK #{cardData.rank.toLocaleString()} OF 6,969
-            </div>
-          </div>
-        </div>
 
-        {/* ── BACK ── */}
-        <div className="card-face" style={{
-          position:"absolute", inset:0, borderRadius:18,
-          transform:"rotateY(180deg)",
-          background:"linear-gradient(160deg,#06000e 0%,#0e0018 55%,#04000a 100%)",
-          border:"2px solid rgba(255,224,72,0.4)",
-          boxShadow:"0 0 50px rgba(255,224,72,0.18),0 28px 70px rgba(0,0,0,0.85)",
-          overflow:"hidden",
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:14,
-        }}>
-          {/* Diagonal pattern */}
-          <div style={{
-            position:"absolute", inset:0,
-            backgroundImage:"repeating-linear-gradient(45deg,rgba(255,224,72,0.025) 0,rgba(255,224,72,0.025) 1px,transparent 0,transparent 50%)",
-            backgroundSize:"14px 14px",
-          }}/>
-          <div className="holo" style={{
-            position:"absolute", inset:0,
-            background:"linear-gradient(135deg,rgba(255,0,128,0.1),rgba(0,255,148,0.08),rgba(0,191,255,0.1),rgba(191,0,255,0.08))",
-            mixBlendMode:"color-dodge", pointerEvents:"none",
-          }}/>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/shaka.png" alt="" style={{ width:W*0.42, height:W*0.42, filter:"drop-shadow(0 0 22px rgba(255,224,72,0.7))", position:"relative", zIndex:1 }}/>
-          <div style={{ fontFamily:"var(--font-brice)", fontSize:W*0.1, fontWeight:900, color:GOLD, textTransform:"uppercase", letterSpacing:"0.08em", textShadow:"0 0 32px rgba(255,224,72,0.85)", position:"relative", zIndex:1, textAlign:"center", lineHeight:1.1 }}>
-            GOOD<br/>VIBES<br/>CLUB
-          </div>
-          <div style={{ fontFamily:"var(--font-mundial)", fontSize:W*0.035, color:"rgba(255,255,255,0.22)", letterSpacing:"0.14em", position:"relative", zIndex:1 }}>
-            TAP TO FLIP
-          </div>
+              {/* Bottom info panel */}
+              <div style={{ position:"absolute",bottom:0,left:0,right:0,padding:`${H*.024}px ${W*.055}px ${H*.028}px`,display:"flex",flexDirection:"column",gap:H*.016 }}>
+                {/* Shaka + archetype */}
+                <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/shaka.png" alt="" style={{ width:W*.072,height:W*.072,filter:`drop-shadow(0 0 6px ${tg})` }}/>
+                  <div style={{ fontFamily:"var(--font-brice)",fontSize:W*.065,fontWeight:900,color:tc,textTransform:"uppercase",letterSpacing:"0.03em",textShadow:`0 0 20px ${tg}`,lineHeight:1.05,flex:1 }}>{card.archetype}</div>
+                </div>
+                {/* Quote */}
+                <div style={{ fontFamily:"var(--font-mundial)",fontSize:W*.032,color:"rgba(255,255,255,0.42)",fontStyle:"italic",lineHeight:1.4 }}>"{card.quote}"</div>
+                {/* Stats row — colored chips */}
+                <div style={{ display:"flex",gap:W*.016 }}>
+                  {(["RARITY","DRIP","ENERGY","AURA"] as const).map((label,i)=>{
+                    const val=[card.rarity,card.drip,card.energy,card.aura][i];
+                    const col=STAT_COLORS[i];
+                    return (
+                      <div key={label} style={{ flex:1,background:`${col}18`,border:`1px solid ${col}55`,borderRadius:7,padding:`${H*.01}px 0`,display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}>
+                        <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*.024,color:`${col}aa`,letterSpacing:"0.08em",textTransform:"uppercase" }}>{label}</span>
+                        <span style={{ fontFamily:"var(--font-brice)",fontSize:W*.06,fontWeight:900,color:col,textShadow:val>=80?`0 0 10px ${col}`:"none" }}>{val}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Badges + rank */}
+                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                  <div style={{ display:"flex",gap:4 }}>
+                    {card.badges.map(b=>(
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={b} src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b} style={{ width:W*.1,height:W*.1,borderRadius:6,border:`1px solid rgba(255,255,255,0.15)` }} onError={e=>{ (e.target as HTMLImageElement).style.display="none"; }}/>
+                    ))}
+                  </div>
+                  <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*.026,color:"rgba(255,255,255,0.22)",letterSpacing:"0.08em" }}>#{card.rank.toLocaleString()} of 6,969</span>
+                </div>
+              </div>
+            </div>
+
+            {/* BACK */}
+            <div className="card-face" style={{ position:"absolute",inset:0,borderRadius:18,transform:"rotateY(180deg)",background:"linear-gradient(160deg,#08001a,#140030,#060012)",overflow:"hidden",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14 }}>
+              <div style={{ position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(45deg,rgba(255,224,72,0.025) 0,rgba(255,224,72,0.025) 1px,transparent 0,transparent 50%)",backgroundSize:"14px 14px" }}/>
+              <div className="holo" style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(255,0,128,0.12),rgba(0,255,148,0.1),rgba(0,191,255,0.12),rgba(191,0,255,0.1))",mixBlendMode:"color-dodge",pointerEvents:"none" }}/>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/shaka.png" alt="" style={{ width:W*.42,height:W*.42,filter:"drop-shadow(0 0 24px rgba(255,224,72,0.75))",position:"relative",zIndex:1 }}/>
+              <div style={{ fontFamily:"var(--font-brice)",fontSize:W*.1,fontWeight:900,color:"#FFE048",textTransform:"uppercase",letterSpacing:"0.08em",textShadow:"0 0 32px rgba(255,224,72,0.85)",position:"relative",zIndex:1,textAlign:"center",lineHeight:1.1 }}>GOOD<br/>VIBES<br/>CLUB</div>
+              <div style={{ fontFamily:"var(--font-mundial)",fontSize:W*.034,color:"rgba(255,255,255,0.2)",letterSpacing:"0.14em",position:"relative",zIndex:1 }}>TAP TO FLIP</div>
+            </div>
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
+
+      <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.2)",margin:0,letterSpacing:"0.08em" }}>Tap card to flip</p>
+
+      {/* Actions */}
+      <div style={{ display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center" }}>
+        <motion.button whileTap={{ scale:.95 }} onClick={onShare}
+          style={{ padding:"10px 22px",borderRadius:10,cursor:"pointer",border:"none",background:"linear-gradient(135deg,#FFE048,#FFD700,#FFAA00)",color:"#050505",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em",boxShadow:"0 4px 22px rgba(255,224,72,0.45)" }}>
+          𝕏 SHARE ON X
+        </motion.button>
+        <motion.button whileTap={{ scale:.95 }} onClick={onDownload}
+          style={{ padding:"10px 22px",borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.05)",border:"1.5px solid rgba(255,255,255,0.18)",color:"rgba(255,255,255,0.7)",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em" }}>
+          ↓ DOWNLOAD
+        </motion.button>
+        <motion.button whileTap={{ scale:.95 }} onClick={onReset}
+          style={{ padding:"10px 22px",borderRadius:10,cursor:"pointer",background:"rgba(255,224,72,0.07)",border:"1.5px solid rgba(255,224,72,0.32)",color:GOLD,fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em" }}>
+          🕹 PLAY AGAIN
+        </motion.button>
+      </div>
     </div>
   );
 }
 
-// ─── DOWNLOAD CARD ────────────────────────────────────────────────────────────
-async function downloadCard(tokenId: number, cardData: CardData) {
+// ─── TIER BURST ───────────────────────────────────────────────────────────────
+function TierBurst({ tier }:{ tier:Tier }) {
+  const c=TIER_COLOR[tier];
+  return (
+    <div style={{ position:"fixed",inset:0,pointerEvents:"none",zIndex:60,overflow:"hidden" }}>
+      {Array.from({length:30},(_,i)=>{
+        const a=(i/30)*360,d=150+Math.random()*250;
+        return <motion.div key={i} initial={{ x:"50vw",y:"50vh",scale:0,opacity:1 }} animate={{ x:`calc(50vw + ${Math.cos(a*Math.PI/180)*d}px)`,y:`calc(50vh + ${Math.sin(a*Math.PI/180)*d}px)`,scale:[0,1.6,.6],opacity:[1,1,0] }} transition={{ duration:1.2,ease:"easeOut",delay:i*.01 }} style={{ position:"absolute",width:7,height:7,borderRadius:"50%",background:c,boxShadow:`0 0 12px ${c},0 0 24px ${c}` }}/>;
+      })}
+    </div>
+  );
+}
+
+// ─── CANVAS DOWNLOAD ──────────────────────────────────────────────────────────
+async function downloadCard(tokenId:number,card:CardData){
   try {
-    const W=400, H=W*1.42;
-    const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const W=420,H=W*1.42;
+    const cv=document.createElement("canvas");cv.width=W;cv.height=H;
     const ctx=cv.getContext("2d")!;
-    const tc=TIER_COLOR[cardData.tier];
+    const tc=TIER_COLOR[card.tier];
 
     const rr=(x:number,y:number,w:number,h:number,r:number)=>{
-      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
-      ctx.quadraticCurveTo(x+w,y,x+w,y+r); ctx.lineTo(x+w,y+h-r);
-      ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h);
-      ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r);
-      ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+      ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
     };
 
-    rr(0,0,W,H,18); const grad=ctx.createLinearGradient(0,0,W,H);
-    grad.addColorStop(0,"#080810"); grad.addColorStop(0.55,"#0c0c1c"); grad.addColorStop(1,"#060610");
-    ctx.fillStyle=grad; ctx.fill();
+    // Gradient border
+    const borderGrad=ctx.createLinearGradient(0,0,W,H);
+    [["#ff0080","#ff6600","#ffe100","#00ff94","#00bfff","#bf00ff","#ff0080"]].flat().forEach((c,i,a)=>borderGrad.addColorStop(i/(a.length-1),c));
+    rr(0,0,W,H,20);ctx.fillStyle=borderGrad;ctx.fill();
 
-    const imgRes=await fetch(`/api/portrait/${tokenId}`);
-    const imgBlob=await imgRes.blob();
-    const imgUrl=URL.createObjectURL(imgBlob);
-    await new Promise<void>(res=>{
-      const i=new Image(); i.onload=()=>{
-        ctx.save(); rr(0,0,W,H*0.62,18); ctx.clip();
-        ctx.drawImage(i,0,0,W,H*0.62);
-        const vg=ctx.createLinearGradient(0,H*0.38,0,H*0.62);
-        vg.addColorStop(0,"rgba(6,6,16,0)"); vg.addColorStop(1,"rgba(6,6,16,0.97)");
-        ctx.fillStyle=vg; ctx.fillRect(0,H*0.38,W,H*0.24);
-        ctx.restore(); URL.revokeObjectURL(imgUrl); res();
-      }; i.src=imgUrl;
+    // Card bg
+    const bgGrad=ctx.createLinearGradient(0,0,W,H);
+    if(card.tier==="Legendary"){ bgGrad.addColorStop(0,"#1a0e00");bgGrad.addColorStop(.55,"#2c1c00");bgGrad.addColorStop(1,"#120a00"); }
+    else if(card.tier==="Rare"){ bgGrad.addColorStop(0,"#0e0520");bgGrad.addColorStop(.55,"#1c0a38");bgGrad.addColorStop(1,"#080318"); }
+    else{ bgGrad.addColorStop(0,"#071a1a");bgGrad.addColorStop(.55,"#0d2e30");bgGrad.addColorStop(1,"#041212"); }
+    rr(3,3,W-6,H-6,18);ctx.fillStyle=bgGrad;ctx.fill();
+
+    // Portrait
+    const res=await fetch(`/api/portrait/${tokenId}`);
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    await new Promise<void>(resolve=>{
+      const img=new Image();img.onload=()=>{
+        ctx.save();rr(3,3,W-6,H*.6,18);ctx.clip();
+        ctx.drawImage(img,3,3,W-6,H*.6-3);
+        const vg=ctx.createLinearGradient(0,H*.35,0,H*.63);
+        vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,.95)");
+        ctx.fillStyle=vg;ctx.fillRect(3,H*.35,W-6,H*.3);
+        ctx.restore();URL.revokeObjectURL(url);resolve();
+      };img.src=url;
     });
 
-    ctx.save(); rr(1,1,W-2,H-2,17); ctx.strokeStyle=tc; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+    const brice="'Arial',sans-serif",mundial="'Arial',sans-serif";
 
-    const brice="900 italic 14px sans-serif";
-    const mundial="12px sans-serif";
+    // Token badge
+    ctx.save();rr(12,12,80,22,5);ctx.fillStyle="rgba(0,0,0,.55)";ctx.fill();ctx.restore();
+    ctx.font=`12px ${mundial}`;ctx.fillStyle="rgba(255,255,255,.75)";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(`GVC #${tokenId}`,20,23);
 
-    ctx.font=`11px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.65)";
-    ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(`GVC #${tokenId}`,14,22);
+    // Tier badge
+    const tw=ctx.measureText(card.tier.toUpperCase()).width+18;
+    ctx.save();rr(W-tw-12,12,tw,22,5);ctx.fillStyle=tc+"22";ctx.fill();ctx.strokeStyle=tc;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
+    ctx.font=`bold 12px ${brice}`;ctx.fillStyle=tc;ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(card.tier.toUpperCase(),W-14,23);
 
-    const tierW=ctx.measureText(cardData.tier.toUpperCase()).width+18;
-    ctx.save(); rr(W-tierW-12,10,tierW,20,4);
-    ctx.fillStyle=tc+"22"; ctx.fill(); ctx.strokeStyle=tc; ctx.lineWidth=1; ctx.stroke(); ctx.restore();
-    ctx.font=`900 11px sans-serif`; ctx.fillStyle=tc; ctx.textAlign="right";
-    ctx.fillText(cardData.tier.toUpperCase(),W-14,21);
+    // Shaka icon
+    const shakaImg=await new Promise<HTMLImageElement>(resolve=>{
+      const s=new Image();s.onload=()=>resolve(s);s.onerror=()=>resolve(s);s.src="/shaka.png";
+    });
+    if(shakaImg.naturalWidth>0) ctx.drawImage(shakaImg,14,H*.6+6,26,26);
 
-    const BAS=H*0.63; const PAD=16;
-    ctx.font=`900 20px sans-serif`; ctx.fillStyle=tc;
-    ctx.shadowColor=tc; ctx.shadowBlur=20;
-    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-    ctx.fillText(cardData.archetype.toUpperCase(),PAD,BAS+18); ctx.shadowBlur=0;
+    // Archetype
+    ctx.font=`bold 22px ${brice}`;ctx.fillStyle=tc;ctx.textAlign="left";ctx.textBaseline="alphabetic";
+    ctx.shadowColor=tc;ctx.shadowBlur=18;
+    ctx.fillText(card.archetype.toUpperCase(),46,H*.6+26);ctx.shadowBlur=0;
 
-    ctx.font=`italic 11px sans-serif`; ctx.fillStyle="rgba(255,255,255,0.38)";
-    ctx.fillText(`"${cardData.quote}"`,PAD,BAS+36);
+    // Quote
+    ctx.font=`italic 11px ${mundial}`;ctx.fillStyle="rgba(255,255,255,.4)";
+    ctx.fillText(`"${card.quote}"`,14,H*.6+44);
 
-    const statCols=4,gap=6,sW=(W-PAD*2-gap*(statCols-1))/statCols;
-    const SY=BAS+46,SH=38;
-    const statColors=[tc,"#FF6B9D","#00bfff","#00ff94"];
-    (["RARITY","DRIP","ENERGY","AURA"] as const).forEach((lbl,i)=>{
-      const val=[cardData.rarity,cardData.drip,cardData.energy,cardData.aura][i];
-      const sx=PAD+i*(sW+gap);
-      ctx.save(); rr(sx,SY,sW,SH,7); ctx.fillStyle="rgba(5,5,5,0.75)"; ctx.fill();
-      ctx.strokeStyle="rgba(255,224,72,0.14)"; ctx.lineWidth=1; ctx.stroke(); ctx.restore();
-      ctx.font=`8px sans-serif`; ctx.fillStyle="rgba(255,255,255,0.35)";
-      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl,sx+sW/2,SY+10);
-      ctx.font=`900 20px sans-serif`; ctx.fillStyle=statColors[i];
-      if(val>=80){ctx.shadowColor=statColors[i];ctx.shadowBlur=12;}
-      ctx.fillText(String(val),sx+sW/2,SY+27); ctx.shadowBlur=0;
+    // Stat chips
+    const scols=4,sg=5,sw=(W-28-sg*(scols-1))/scols;
+    const SY=H*.6+54,SH=42;
+    const labels=["RARITY","DRIP","ENERGY","AURA"];
+    const vals=[card.rarity,card.drip,card.energy,card.aura];
+    STAT_COLORS.forEach((col,i)=>{
+      const sx=14+i*(sw+sg);
+      ctx.save();rr(sx,SY,sw,SH,7);ctx.fillStyle=col+"22";ctx.fill();ctx.strokeStyle=col+"66";ctx.lineWidth=1;ctx.stroke();ctx.restore();
+      ctx.font=`9px ${mundial}`;ctx.fillStyle=col+"99";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(labels[i],sx+sw/2,SY+11);
+      ctx.font=`bold 22px ${brice}`;ctx.fillStyle=col;
+      if(vals[i]>=80){ctx.shadowColor=col;ctx.shadowBlur=10;}
+      ctx.fillText(String(vals[i]),sx+sw/2,SY+30);ctx.shadowBlur=0;
     });
 
-    ctx.font=`9px sans-serif`; ctx.fillStyle="rgba(255,255,255,0.2)";
-    ctx.textAlign="center"; ctx.textBaseline="alphabetic";
-    ctx.fillText(`RANK #${cardData.rank.toLocaleString()} OF 6,969`,W/2,H-10);
+    // Rank
+    ctx.font=`10px ${mundial}`;ctx.fillStyle="rgba(255,255,255,.22)";ctx.textAlign="center";ctx.textBaseline="alphabetic";
+    ctx.fillText(`RANK #${card.rank.toLocaleString()} OF 6,969`,W/2,H-10);
 
-    const a=document.createElement("a"); a.download=`vibe-card-${tokenId}.png`;
-    a.href=cv.toDataURL("image/png"); a.click();
-  } catch(e) { console.error("Download failed",e); }
+    const a=document.createElement("a");a.download=`vibe-card-${tokenId}.png`;a.href=cv.toDataURL("image/png");a.click();
+  } catch(e){ console.error("download failed",e); }
 }
 
 // ─── PAGE ─────────────────────────────────────────────────────────────────────
-export default function Page() {
-  const [phase,    setPhase]    = useState<Phase>("IDLE");
-  const [input,    setInput]    = useState("");
-  const [tokenId,  setTokenId]  = useState<number|null>(null);
-  const [cardData, setCardData] = useState<CardData|null>(null);
-  const [burst,    setBurst]    = useState(false);
+const PACK_POSITIONS=[22,50,78]; // x% of glass width for the 3 packs
+const PACK_TIERS:Tier[]=["Common","Rare","Legendary"];
 
-  const slotRef = useRef<HTMLDivElement>(null);
-  const machineOn = phase !== "IDLE";
-  const machineVisible = ["IDLE","ACTIVE","VENDING","DRAWER"].includes(phase);
+export default function Page(){
+  const [phase,setPhase]=useState<Phase>("PIN");
+  const [pin,setPin]=useState("");
+  const [tokenId,setTokenId]=useState<number|null>(null);
+  const [card,setCard]=useState<CardData|null>(null);
+  const [clawX,setClawX]=useState(50);      // 0-100
+  const [armPx,setArmPx]=useState(0);       // claw arm extension in px
+  const [clawClosed,setClawClosed]=useState(false);
+  const [clawHasPack,setClawHasPack]=useState(false);
+  const [grabbedIdx,setGrabbedIdx]=useState(-1);
+  const [burst,setBurst]=useState(false);
+  const moveRef=useRef<ReturnType<typeof setInterval>|null>(null);
 
-  const msgMap: Record<Phase,string> = {
-    IDLE:         "INSERT COIN TO BEGIN",
-    ACTIVE:       input ? `TOKEN # ${input.padStart(4,"0")}` : "ENTER TOKEN ID",
-    VENDING:      "DISPENSING...",
-    DRAWER:       "COLLECT YOUR PACK ▼",
-    PACK_HAND:    "TEAR OPEN YOUR PACK!",
-    CARD_REVEALED:`GVC #${tokenId} REVEALED!`,
-  };
+  const stopMove=useCallback(()=>{
+    if(moveRef.current){ clearInterval(moveRef.current);moveRef.current=null; }
+  },[]);
 
-  const onCoin = useCallback(() => {
-    sfxCoin();
-    setPhase("ACTIVE");
-  }, []);
+  const startMove=useCallback((dir:"left"|"right")=>{
+    stopMove();
+    if(phase!=="READY") return;
+    moveRef.current=setInterval(()=>{
+      setClawX(x=>dir==="left"?Math.max(8,x-2.5):Math.min(92,x+2.5));
+    },30);
+  },[phase,stopMove]);
 
-  const onVend = useCallback(() => {
-    const id = parseInt(input, 10);
-    if (isNaN(id) || id < 0 || id > 6968) return;
+  useEffect(()=>()=>stopMove(),[stopMove]);
+
+  // Keyboard controls
+  useEffect(()=>{
+    if(phase!=="READY") return;
+    const kd=(e:KeyboardEvent)=>{
+      if(e.key==="ArrowLeft") startMove("left");
+      if(e.key==="ArrowRight") startMove("right");
+      if(e.key===" "||e.key==="ArrowDown") handleDrop();
+    };
+    const ku=(e:KeyboardEvent)=>{ if(e.key==="ArrowLeft"||e.key==="ArrowRight") stopMove(); };
+    window.addEventListener("keydown",kd);window.addEventListener("keyup",ku);
+    return()=>{ window.removeEventListener("keydown",kd);window.removeEventListener("keyup",ku); };
+  },[phase,startMove,stopMove]); // handleDrop added below
+
+  const handleDrop=useCallback(()=>{
+    if(phase!=="READY") return;
+    stopMove();
+    // Find nearest pack
+    const nearest=PACK_POSITIONS.reduce((best,pos,i)=>Math.abs(pos-clawX)<Math.abs(PACK_POSITIONS[best]-clawX)?i:best,0);
+    sfxDrop();
+    setPhase("DROPPING");
+    setArmPx(190);
+    setTimeout(()=>{
+      setClawClosed(true);
+      setGrabbedIdx(nearest);
+      sfxGrab();
+      setTimeout(()=>{
+        setClawHasPack(true);
+        setArmPx(0);
+        setPhase("LIFTING");
+        setTimeout(()=>{
+          setClawX(92);
+          setTimeout(()=>{
+            setPhase("CHUTE");
+          },700);
+        },800);
+      },500);
+    },900);
+  },[phase,clawX,stopMove]);
+
+  const handlePlay=useCallback(()=>{
+    const id=parseInt(pin,10);
+    if(isNaN(id)||id<0||id>6968) return;
     setTokenId(id);
-    setCardData(generateCardData(id));
-    setPhase("VENDING");
-    sfxVend();
-    setTimeout(() => setPhase("DRAWER"), 1300);
-  }, [input]);
+    setCard(generateCard(id));
+    sfxCoin();
+    setPhase("READY");
+  },[pin]);
 
-  const onCollect = useCallback(() => setPhase("PACK_HAND"), []);
+  const handleCollect=useCallback(()=>setPhase("TEARING"),[]);
 
-  const onTearDone = useCallback(() => {
-    setPhase("CARD_REVEALED");
+  const handleTearDone=useCallback(()=>{
+    setPhase("CARD");
     sfxReveal();
     setBurst(true);
-    setTimeout(() => setBurst(false), 1600);
-  }, []);
+    setTimeout(()=>setBurst(false),1500);
+  },[]);
 
-  const onReset = useCallback(() => {
-    setPhase("IDLE");
-    setInput("");
-    setTokenId(null);
-    setCardData(null);
-    setBurst(false);
-  }, []);
+  const handleReset=useCallback(()=>{
+    setPhase("PIN");setPin("");setTokenId(null);setCard(null);
+    setClawX(50);setArmPx(0);setClawClosed(false);setClawHasPack(false);setGrabbedIdx(-1);setBurst(false);
+  },[]);
 
-  const canVend = phase === "ACTIVE" && input.length > 0 && !isNaN(parseInt(input));
-  const tier: Tier = (cardData?.tier ?? "Common") as Tier;
+  const pressPin=(k:string)=>{
+    sfxKey();
+    if(k==="CLR"){setPin("");return;}
+    if(k==="RND"){setPin(String(Math.floor(Math.random()*6969)));return;}
+    if(pin.length>=4) return;
+    setPin(pin+k);
+  };
+
+  const canPlay=pin.length>0&&!isNaN(parseInt(pin))&&parseInt(pin)>=0&&parseInt(pin)<=6968;
+  const tier:Tier=(card?.tier??"Common") as Tier;
+  const machineVisible=phase!=="TEARING"&&phase!=="CARD";
+  const GLASS_H=220;
 
   return (
     <>
-      <style>{STYLES}</style>
+      <style>{CSS}</style>
       <style>{`.card-rotator{-webkit-transform-style:preserve-3d;transform-style:preserve-3d}.card-face{-webkit-backface-visibility:hidden;backface-visibility:hidden}`}</style>
 
-      {burst && cardData && <TierBurst tier={cardData.tier}/>}
+      {burst&&card&&<TierBurst tier={card.tier}/>}
 
-      <main style={{
-        minHeight:"100vh", display:"flex", flexDirection:"column",
-        alignItems:"center", justifyContent:"flex-start",
-        padding:"16px 12px 80px", overflowX:"hidden", width:"100%", boxSizing:"border-box",
-      }}>
+      <main style={{ minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"14px 12px 80px",overflowX:"hidden",width:"100%",boxSizing:"border-box" }}>
 
-        {/* ── HEADER ── */}
-        <motion.div initial={{ opacity:0,y:-12 }} animate={{ opacity:1,y:0 }} style={{ textAlign:"center", marginBottom:14 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:3 }}>
+        {/* HEADER */}
+        <motion.div initial={{ opacity:0,y:-12 }} animate={{ opacity:1,y:0 }} style={{ textAlign:"center",marginBottom:14 }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:3 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/shaka.png" alt="" className="shaka-idle" style={{ width:24,height:24 }}/>
-            <h1 className="text-shimmer" style={{ fontFamily:"var(--font-brice)",fontSize:"clamp(18px,5vw,34px)",fontWeight:900,margin:0,textTransform:"uppercase",letterSpacing:"0.06em" }}>
-              THE VIBE MACHINE
-            </h1>
+            <h1 className="text-shimmer" style={{ fontFamily:"var(--font-brice)",fontSize:"clamp(18px,5vw,32px)",fontWeight:900,margin:0,textTransform:"uppercase",letterSpacing:"0.06em" }}>GVC CLAW MACHINE</h1>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/shaka.png" alt="" className="shaka-idle" style={{ width:24,height:24 }}/>
           </div>
-          <p style={{ color:"rgba(255,255,255,0.22)",fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",margin:0 }}>
-            GVC Collectible Card Vending Machine
-          </p>
+          <p style={{ color:"rgba(255,255,255,0.22)",fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",margin:0 }}>Enter your GVC token PIN · grab your pack · reveal your card</p>
         </motion.div>
 
-        {/* ── VENDING MACHINE ── */}
+        {/* CLAW MACHINE */}
         <AnimatePresence>
           {machineVisible && (
             <motion.div key="machine"
               initial={{ opacity:0,y:18 }}
               animate={{ opacity:1,y:0 }}
-              exit={{ opacity:0,x:-140,scale:0.85, transition:{ duration:0.5,ease:"easeIn" } }}
-              style={{ display:"flex",alignItems:"flex-start",gap:10,width:"100%",maxWidth:430,justifyContent:"center" }}
+              exit={{ opacity:0,x:-160,scale:.85,transition:{ duration:.5,ease:"easeIn" } }}
+              style={{ width:"100%",maxWidth:400 }}
             >
-              {/* Coin tray */}
-              <div style={{ paddingTop:56,flexShrink:0 }}>
-                <AnimatePresence>
-                  {phase === "IDLE" && (
-                    <motion.div initial={{ opacity:0,x:-14 }} animate={{ opacity:1,x:0 }} exit={{ opacity:0,scale:0.5 }}>
-                      <DraggableCoin onInsert={onCoin} slotRef={slotRef}/>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              {/* Machine cabinet */}
+              <div style={{
+                background:"linear-gradient(180deg,#0c0822 0%,#0a0620 55%,#070418 100%)",
+                border:"2px solid rgba(120,80,255,0.45)",borderRadius:18,overflow:"hidden",
+                boxShadow:"0 0 50px rgba(120,80,255,0.15),0 0 100px rgba(120,80,255,0.05),inset 0 0 80px rgba(0,0,0,0.5)",
+              }}>
 
-              {/* MACHINE BODY */}
-              <div
-                className={machineOn ? "machine-on" : ""}
-                style={{
-                  flex:1,
-                  background:"linear-gradient(180deg,#0d0d18 0%,#0a0a12 55%,#07070e 100%)",
-                  border:`2px solid ${machineOn ? "rgba(255,224,72,0.52)" : "rgba(255,224,72,0.18)"}`,
-                  borderRadius:18, overflow:"hidden",
-                  transition:"border-color 0.5s",
-                }}
-              >
-                <LEDStrip active={machineOn}/>
+                {/* LED TOP */}
+                <div className="led-strip" style={{ height:5 }}/>
 
-                {/* Brand row */}
-                <div style={{ padding:"10px 12px 8px", borderBottom:"1px solid rgba(255,224,72,0.07)", background:"linear-gradient(180deg,rgba(255,224,72,0.025) 0%,transparent 100%)" }}>
-                  <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8 }}>
-                    {/* Logo */}
-                    <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/gvc-logotype.svg" alt="GVC" style={{ height:14,opacity:0.58 }}/>
-                      <span style={{ fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,color:GOLD,letterSpacing:"0.1em",textTransform:"uppercase",textShadow:"0 0 14px rgba(255,224,72,0.5)" }}>
-                        VIBE MACHINE
-                      </span>
-                    </div>
-                    {/* Coin slot */}
-                    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2 }}>
-                      <motion.div ref={slotRef}
-                        animate={{ boxShadow: phase==="IDLE"
-                          ? ["0 0 6px rgba(255,224,72,0.45)","0 0 14px rgba(255,224,72,0.75)","0 0 6px rgba(255,224,72,0.45)"]
-                          : "0 0 8px rgba(46,255,46,0.55)" }}
-                        transition={{ boxShadow:{ duration:1.1,repeat:phase==="IDLE"?Infinity:0 } }}
-                        style={{
-                          width:44,height:10,borderRadius:5,
-                          background: phase!=="IDLE" ? "rgba(46,255,46,0.14)" : "#020802",
-                          border:`2px solid ${phase!=="IDLE" ? "rgba(46,255,46,0.6)" : "rgba(255,224,72,0.55)"}`,
-                          transition:"all 0.4s",
-                        }}
-                      />
-                      <span style={{ fontFamily:"var(--font-mundial)",fontSize:6,color:"rgba(255,224,72,0.32)",letterSpacing:"0.08em",whiteSpace:"nowrap" }}>COIN SLOT</span>
-                    </div>
+                {/* Cabinet top label */}
+                <div style={{ padding:"8px 14px 6px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"linear-gradient(180deg,rgba(120,80,255,0.06) 0%,transparent 100%)" }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/gvc-logotype.svg" alt="GVC" style={{ height:14,opacity:.6 }}/>
+                    <span style={{ fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,color:"#c084fc",letterSpacing:"0.1em",textTransform:"uppercase",textShadow:"0 0 14px rgba(192,132,252,0.6)" }}>CLAW MACHINE</span>
                   </div>
-                  <DisplayPanel msg={msgMap[phase]} active={machineOn}/>
+                  {/* Credit display */}
+                  <div style={{ background:"#001500",border:"1px solid rgba(46,255,46,0.4)",borderRadius:5,padding:"3px 10px",fontFamily:"'Courier New',monospace",fontSize:10,color:"#2EFF2E",letterSpacing:"0.12em",textShadow:"0 0 8px rgba(46,255,46,0.8)" }}>
+                    {phase==="PIN"?"READY":phase==="READY"?"PLAY!":phase==="CHUTE"?"COLLECT!":"••••"}
+                  </div>
                 </div>
 
-                {/* Glass window — pack display */}
-                <div style={{
-                  position:"relative",margin:"8px 10px",
-                  background:"linear-gradient(145deg,rgba(14,14,24,0.97),rgba(8,8,14,0.99))",
-                  border:"1px solid rgba(255,224,72,0.1)",borderRadius:10,overflow:"hidden",
-                  minHeight:170,display:"flex",alignItems:"center",justifyContent:"center",
-                }}>
-                  {/* Glass top reflection */}
-                  <div style={{ position:"absolute",inset:0,zIndex:10,pointerEvents:"none",background:"linear-gradient(135deg,rgba(255,255,255,0.048) 0%,transparent 50%,rgba(255,255,255,0.018) 100%)" }}/>
-                  <div style={{ position:"absolute",top:0,left:0,right:0,height:1,background:"rgba(255,255,255,0.07)",zIndex:11 }}/>
+                {/* GLASS VIEWING AREA */}
+                <div style={{ margin:"0 10px",position:"relative",height:GLASS_H,background:"linear-gradient(180deg,rgba(10,8,30,0.95) 0%,rgba(8,6,24,0.98) 100%)",border:"1.5px solid rgba(120,80,255,0.25)",borderRadius:10,overflow:"hidden" }}>
+                  {/* Glass reflection overlay */}
+                  <div style={{ position:"absolute",inset:0,zIndex:20,pointerEvents:"none",background:"linear-gradient(135deg,rgba(255,255,255,0.04) 0%,transparent 45%,rgba(255,255,255,0.015) 100%)" }}/>
+                  <div style={{ position:"absolute",top:0,left:0,right:0,height:1,background:"rgba(255,255,255,0.07)",zIndex:21 }}/>
 
-                  <div style={{ padding:16,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1 }}>
-                    {phase === "IDLE" ? (
-                      <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:8 }}>
-                        <span style={{ fontSize:26,opacity:0.18 }}>🎰</span>
-                        <span style={{ fontFamily:"var(--font-mundial)",fontSize:10,color:"rgba(255,255,255,0.18)",letterSpacing:"0.12em",textTransform:"uppercase" }}>DRAG COIN TO SLOT</span>
+                  {/* Star field background */}
+                  <div style={{ position:"absolute",inset:0,zIndex:0,opacity:.4,backgroundImage:"radial-gradient(circle,rgba(255,255,255,0.8) 1px,transparent 1px)",backgroundSize:"30px 30px" }}/>
+
+                  {/* Claw rail track */}
+                  <div style={{ position:"absolute",top:10,left:"5%",right:"5%",height:6,background:"linear-gradient(180deg,#303040,#202030)",borderRadius:3,zIndex:5,boxShadow:"0 2px 6px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.1)" }}/>
+                  {/* Rail end caps */}
+                  <div style={{ position:"absolute",top:7,left:"4%",width:10,height:12,background:"linear-gradient(180deg,#505060,#303040)",borderRadius:3,zIndex:5 }}/>
+                  <div style={{ position:"absolute",top:7,right:"4%",width:10,height:12,background:"linear-gradient(180deg,#505060,#303040)",borderRadius:3,zIndex:5 }}/>
+
+                  {/* CLAW */}
+                  {phase!=="PIN"&&(
+                    <ClawArm
+                      x={clawX}
+                      armPx={armPx}
+                      closed={clawClosed}
+                      hasPack={clawHasPack}
+                      packTier={tier}
+                    />
+                  )}
+
+                  {/* Packs on the bottom shelf */}
+                  <div style={{ position:"absolute",bottom:18,left:0,right:0,display:"flex",justifyContent:"space-around",paddingLeft:"8%",paddingRight:"8%",zIndex:3 }}>
+                    {PACK_TIERS.map((t,i)=>(
+                      <div key={i} className={phase==="READY"||phase==="PIN"?"pack-swing":""} style={{ animationDelay:`${i*.4}s` }}>
+                        <MiniPack tier={t} grabbed={grabbedIdx===i&&(phase==="GRABBING"||phase==="LIFTING"||phase==="CHUTE"||phase==="TEARING"||phase==="CARD")}/>
                       </div>
-                    ) : phase === "VENDING" ? (
-                      <motion.div initial={{ y:0 }} animate={{ y:140,rotate:6 }} transition={{ duration:0.85,ease:[0.4,0,1,1] }}>
-                        <GlossyPack tier={tier} w={110}/>
-                      </motion.div>
-                    ) : (
-                      <GlossyPack tier={tier} w={110} floating/>
-                    )}
+                    ))}
                   </div>
 
-                  {/* Drawer strip */}
+                  {/* Chute opening (bottom right) */}
+                  <div style={{ position:"absolute",bottom:0,right:0,width:58,height:22,background:"linear-gradient(180deg,rgba(0,20,0,0.9),rgba(0,10,0,0.95))",border:"1px solid rgba(46,255,46,0.35)",borderRadius:"6px 6px 0 0",display:"flex",alignItems:"center",justifyContent:"center",zIndex:6 }}>
+                    <span style={{ fontFamily:"var(--font-mundial)",fontSize:8,color:"rgba(46,255,46,0.6)",letterSpacing:"0.1em" }}>CHUTE</span>
+                  </div>
+
+                  {/* Idle overlay */}
+                  {phase==="PIN"&&(
+                    <div style={{ position:"absolute",inset:0,zIndex:15,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.45)" }}>
+                      <div style={{ textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8 }}>
+                        <div style={{ fontSize:28,opacity:.35 }}>🎰</div>
+                        <p style={{ fontFamily:"var(--font-mundial)",fontSize:10,color:"rgba(255,255,255,0.25)",letterSpacing:"0.12em",textTransform:"uppercase",margin:0 }}>ENTER PIN TO PLAY</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CHUTE pack collected */}
                   <AnimatePresence>
-                    {phase === "DRAWER" && (
-                      <motion.div initial={{ y:28,opacity:0 }} animate={{ y:0,opacity:1 }}
-                        className="drawer-ready"
-                        style={{
-                          position:"absolute",bottom:0,left:0,right:0,height:42,
-                          background:"rgba(0,18,0,0.9)",borderTop:"1px solid rgba(46,255,46,0.35)",
-                          display:"flex",alignItems:"center",justifyContent:"center",zIndex:12,
-                        }}>
-                        <motion.span animate={{ opacity:[0.6,1,0.6] }} transition={{ duration:0.9,repeat:Infinity }}
-                          style={{ fontFamily:"var(--font-mundial)",fontSize:10,color:"rgba(46,255,46,0.85)",letterSpacing:"0.14em",textTransform:"uppercase" }}>
-                          ▼ PACK DISPENSED — COLLECT ▼
-                        </motion.span>
+                    {phase==="CHUTE"&&(
+                      <motion.div initial={{ y:-50,opacity:0 }} animate={{ y:0,opacity:1 }} transition={{ type:"spring",stiffness:250,damping:20 }}
+                        style={{ position:"absolute",bottom:24,right:8,zIndex:14 }}>
+                        <div style={{ animation:"chuteBounce .6s ease-out forwards" }}>
+                          <MiniPack tier={tier} grabbed={false}/>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-
-                  {/* Locked overlay */}
-                  {phase === "IDLE" && <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.48)",zIndex:9 }}/>}
                 </div>
 
-                {/* Keypad */}
-                <div style={{ opacity:machineOn?1:0.28, transition:"opacity 0.4s", pointerEvents:machineOn?"auto":"none" }}>
-                  <Keypad value={input} onChange={v => { setInput(v); if(v&&phase==="ACTIVE") setPhase("ACTIVE"); }} onVend={onVend} canVend={canVend}/>
+                {/* Decorative side bolts */}
+                <div style={{ padding:"6px 10px 0",display:"flex",justifyContent:"space-between" }}>
+                  {[0,1,2,3].map(i=>(
+                    <div key={i} style={{ width:8,height:8,borderRadius:"50%",background:"linear-gradient(135deg,#404050,#202028)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.1),0 1px 3px rgba(0,0,0,0.4)" }}/>
+                  ))}
                 </div>
 
-                {/* Collect button */}
-                <AnimatePresence>
-                  {phase === "DRAWER" && (
-                    <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} exit={{ opacity:0 }} style={{ padding:"0 10px 10px" }}>
-                      <motion.button onClick={onCollect}
-                        animate={{ boxShadow:["0 0 14px rgba(46,255,46,0.3)","0 0 30px rgba(46,255,46,0.7)","0 0 14px rgba(46,255,46,0.3)"] }}
+                {/* CONTROL PANEL */}
+                <div style={{ padding:"10px 12px 14px",borderTop:"1px solid rgba(120,80,255,0.14)",marginTop:4 }}>
+
+                  {/* PIN ENTRY */}
+                  {phase==="PIN"&&(
+                    <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
+                      <div style={{ fontFamily:"var(--font-mundial)",fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:"0.15em",textTransform:"uppercase",textAlign:"center" }}>ENTER YOUR GVC TOKEN PIN</div>
+                      {/* LCD */}
+                      <div style={{ background:"#001500",border:"1px solid rgba(46,255,46,0.45)",borderRadius:6,padding:"6px 12px",fontFamily:"'Courier New',monospace",fontSize:17,fontWeight:"bold",color:"#2EFF2E",letterSpacing:"0.22em",textAlign:"center",textShadow:"0 0 12px rgba(46,255,46,0.9)",boxShadow:"inset 0 0 14px rgba(46,255,46,0.1)",minHeight:36,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                        {pin?`# ${pin.padStart(4,"0")}`:"_ _ _ _"}
+                      </div>
+                      {/* Keypad */}
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4 }}>
+                        {["1","2","3","4","5","6","7","8","9","CLR","0","RND"].map(k=>(
+                          <motion.button key={k} onClick={()=>pressPin(k)} whileTap={{ scale:.88,y:1 }}
+                            style={{ height:32,borderRadius:5,cursor:"pointer",background:k==="CLR"?"rgba(255,50,50,0.1)":k==="RND"?"rgba(255,224,72,0.1)":"rgba(255,255,255,0.05)",border:`1px solid ${k==="CLR"?"rgba(255,70,70,0.3)":k==="RND"?"rgba(255,224,72,0.3)":"rgba(255,255,255,0.1)"}`,color:k==="CLR"?"rgba(255,100,100,0.8)":k==="RND"?GOLD:"rgba(255,255,255,0.7)",fontFamily:k==="CLR"||k==="RND"?"var(--font-mundial)":"'Courier New',monospace",fontSize:k==="CLR"||k==="RND"?9:15,boxShadow:"0 2px 0 rgba(0,0,0,0.45)" }}>
+                            {k}
+                          </motion.button>
+                        ))}
+                      </div>
+                      {/* PLAY button */}
+                      <motion.button onClick={handlePlay} disabled={!canPlay} whileTap={canPlay?{ scale:.96 }:{}}
+                        animate={canPlay?{ boxShadow:["0 0 12px rgba(192,132,252,0.3)","0 0 28px rgba(192,132,252,0.7)","0 0 12px rgba(192,132,252,0.3)"] }:{}}
+                        transition={{ boxShadow:{ duration:1.3,repeat:Infinity } }}
+                        style={{ height:44,borderRadius:8,cursor:canPlay?"pointer":"default",background:canPlay?"linear-gradient(135deg,#7c3aed,#a855f7,#c084fc)":"rgba(120,80,255,0.06)",border:`1.5px solid ${canPlay?"rgba(192,132,252,0.8)":"rgba(120,80,255,0.2)"}`,color:canPlay?"white":"rgba(192,132,252,0.28)",fontFamily:"var(--font-brice)",fontSize:15,fontWeight:900,letterSpacing:"0.12em",textTransform:"uppercase",boxShadow:canPlay?"0 4px 0 rgba(80,30,160,0.5)":"none",transition:"background .3s,color .3s" }}>
+                        🕹 PLAY
+                      </motion.button>
+                    </div>
+                  )}
+
+                  {/* CLAW CONTROLS */}
+                  {(phase==="READY"||phase==="DROPPING"||phase==="GRABBING"||phase==="LIFTING")&&(
+                    <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+                      <div style={{ textAlign:"center",fontFamily:"var(--font-mundial)",fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:"0.15em",textTransform:"uppercase" }}>
+                        {phase==="READY"?"POSITION CLAW · PRESS DROP":"CLAW IN MOTION..."}
+                      </div>
+                      {/* Move buttons + drop */}
+                      <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                        {/* Left */}
+                        <motion.button
+                          onPointerDown={()=>startMove("left")}
+                          onPointerUp={stopMove}
+                          onPointerLeave={stopMove}
+                          whileTap={{ scale:.9 }}
+                          disabled={phase!=="READY"}
+                          style={{ flex:1,height:52,borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(255,255,255,0.18)",color:"white",fontSize:22,boxShadow:"0 3px 0 rgba(0,0,0,0.4)",touchAction:"none",opacity:phase==="READY"?1:.4 }}>
+                          ◀
+                        </motion.button>
+                        {/* Drop */}
+                        <motion.button onClick={handleDrop} disabled={phase!=="READY"} whileTap={phase==="READY"?{ scale:.92 }:{}}
+                          animate={phase==="READY"?{ boxShadow:["0 4px 0 rgba(180,0,0,0.5),0 0 14px rgba(255,60,60,0.3)","0 4px 0 rgba(180,0,0,0.5),0 0 28px rgba(255,60,60,0.6)","0 4px 0 rgba(180,0,0,0.5),0 0 14px rgba(255,60,60,0.3)"] }:{}}
+                          transition={{ boxShadow:{ duration:1.2,repeat:Infinity } }}
+                          style={{ flex:2,height:52,borderRadius:10,cursor:phase==="READY"?"pointer":"default",background:phase==="READY"?"linear-gradient(180deg,#ef4444,#b91c1c)":"rgba(100,0,0,0.2)",border:`1.5px solid ${phase==="READY"?"rgba(255,100,100,0.7)":"rgba(100,0,0,0.3)"}`,color:"white",fontFamily:"var(--font-brice)",fontSize:16,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase",boxShadow:phase==="READY"?"0 4px 0 rgba(130,0,0,0.5)":"none",transition:"background .3s",opacity:phase==="READY"?1:.5 }}>
+                          DROP!
+                        </motion.button>
+                        {/* Right */}
+                        <motion.button
+                          onPointerDown={()=>startMove("right")}
+                          onPointerUp={stopMove}
+                          onPointerLeave={stopMove}
+                          whileTap={{ scale:.9 }}
+                          disabled={phase!=="READY"}
+                          style={{ flex:1,height:52,borderRadius:10,cursor:"pointer",background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(255,255,255,0.18)",color:"white",fontSize:22,boxShadow:"0 3px 0 rgba(0,0,0,0.4)",touchAction:"none",opacity:phase==="READY"?1:.4 }}>
+                          ▶
+                        </motion.button>
+                      </div>
+                      <div style={{ textAlign:"center",fontFamily:"var(--font-mundial)",fontSize:9,color:"rgba(255,255,255,0.2)",letterSpacing:"0.1em" }}>
+                        HOLD ◀ ▶ TO MOVE · KEYBOARD ARROWS WORK TOO
+                      </div>
+                    </div>
+                  )}
+
+                  {/* COLLECT */}
+                  {phase==="CHUTE"&&(
+                    <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }}>
+                      <motion.button onClick={handleCollect} whileTap={{ scale:.96 }}
+                        animate={{ boxShadow:["0 0 16px rgba(46,255,46,0.3)","0 0 34px rgba(46,255,46,0.75)","0 0 16px rgba(46,255,46,0.3)"] }}
                         transition={{ boxShadow:{ duration:1.1,repeat:Infinity } }}
-                        whileTap={{ scale:0.96 }}
-                        style={{
-                          width:"100%",height:42,borderRadius:8,cursor:"pointer",
-                          background:"linear-gradient(135deg,rgba(46,255,46,0.16),rgba(46,255,46,0.08))",
-                          border:"1.5px solid rgba(46,255,46,0.62)",
-                          color:"#2EFF2E",fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,
-                          letterSpacing:"0.12em",textTransform:"uppercase",
-                          textShadow:"0 0 12px rgba(46,255,46,0.85)",
-                        }}>
-                        ↑ COLLECT YOUR PACK ↑
+                        style={{ width:"100%",height:46,borderRadius:8,cursor:"pointer",background:"linear-gradient(135deg,rgba(46,255,46,0.16),rgba(46,255,46,0.08))",border:"1.5px solid rgba(46,255,46,0.6)",color:"#2EFF2E",fontFamily:"var(--font-brice)",fontSize:15,fontWeight:900,letterSpacing:"0.12em",textTransform:"uppercase",textShadow:"0 0 12px rgba(46,255,46,0.85)" }}>
+                        🎉 COLLECT YOUR PACK!
                       </motion.button>
                     </motion.div>
                   )}
-                </AnimatePresence>
+                </div>
 
-                <LEDStrip active={machineOn}/>
+                <div className="led-strip" style={{ height:5 }}/>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── PACK IN HAND (tear) ── */}
+        {/* PACK TEAR */}
         <AnimatePresence>
-          {phase === "PACK_HAND" && cardData && (
-            <motion.div key="tear"
-              initial={{ opacity:0,scale:0.72,y:36 }}
-              animate={{ opacity:1,scale:1,y:0 }}
-              exit={{ opacity:0,scale:0.85 }}
-              transition={{ type:"spring",stiffness:200,damping:22 }}
-              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:20,marginTop:10 }}
-            >
-              <PackTearSequence tier={tier} onComplete={onTearDone}/>
+          {phase==="TEARING"&&card&&(
+            <motion.div key="tear" initial={{ opacity:0,scale:.7,y:36 }} animate={{ opacity:1,scale:1,y:0 }} exit={{ opacity:0 }} transition={{ type:"spring",stiffness:200,damping:22 }}
+              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:20,marginTop:10 }}>
+              <GlossyPack tier={tier} w={Math.min(200,typeof window!=="undefined"?window.innerWidth*.55:190)}/>
+              <div style={{ marginTop:-10 }}>
+                <PackTear tier={tier} onComplete={handleTearDone}/>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── CARD REVEALED ── */}
+        {/* CARD REVEAL */}
         <AnimatePresence>
-          {phase === "CARD_REVEALED" && tokenId !== null && cardData && (
-            <motion.div key="card"
-              initial={{ opacity:0,scale:0.45,y:55 }}
-              animate={{ opacity:1,scale:1,y:0 }}
-              transition={{ type:"spring",stiffness:155,damping:18,delay:0.08 }}
-              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:18,marginTop:6 }}
-            >
-              <VibeCard3D tokenId={tokenId} cardData={cardData}/>
-
-              <div style={{ display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center" }}>
-                <motion.button whileTap={{ scale:0.95 }}
-                  onClick={() => {
-                    const t=`Just pulled GVC #${tokenId} — ${cardData.tier} tier · ${cardData.archetype} 🤙 #GoodVibesClub #GVC`;
-                    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(t)}`,"_blank");
-                  }}
-                  style={{
-                    padding:"10px 22px",borderRadius:10,cursor:"pointer",border:"none",
-                    background:"linear-gradient(135deg,#FFE048,#FFD700,#FFAA00)",
-                    color:"#050505",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,
-                    letterSpacing:"0.08em",boxShadow:"0 4px 20px rgba(255,224,72,0.45)",
-                  }}>𝕏 SHARE ON X</motion.button>
-
-                <motion.button whileTap={{ scale:0.95 }}
-                  onClick={() => downloadCard(tokenId, cardData)}
-                  style={{
-                    padding:"10px 22px",borderRadius:10,cursor:"pointer",
-                    background:"rgba(255,255,255,0.05)",border:"1.5px solid rgba(255,255,255,0.18)",
-                    color:"rgba(255,255,255,0.7)",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em",
-                  }}>↓ DOWNLOAD</motion.button>
-
-                <motion.button whileTap={{ scale:0.95 }}
-                  onClick={onReset}
-                  style={{
-                    padding:"10px 22px",borderRadius:10,cursor:"pointer",
-                    background:"rgba(255,224,72,0.07)",border:"1.5px solid rgba(255,224,72,0.32)",
-                    color:GOLD,fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em",
-                  }}>🎰 VEND ANOTHER</motion.button>
-              </div>
-
-              <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.16)",margin:0,letterSpacing:"0.08em" }}>
-                Tap card to flip
-              </p>
+          {phase==="CARD"&&tokenId!==null&&card&&(
+            <motion.div key="card" initial={{ opacity:0,scale:.45,y:55 }} animate={{ opacity:1,scale:1,y:0 }} transition={{ type:"spring",stiffness:150,damping:18,delay:.08 }}
+              style={{ marginTop:8 }}>
+              <VibeCard
+                tokenId={tokenId}
+                card={card}
+                onShare={()=>{ const t=`Just pulled GVC #${tokenId} — ${card.tier} · ${card.archetype} 🤙 #GoodVibesClub #GVC`;window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(t)}`,"_blank"); }}
+                onDownload={()=>downloadCard(tokenId,card)}
+                onReset={handleReset}
+              />
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Footer */}
-        <div style={{ marginTop:38,textAlign:"center" }}>
-          <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.14)",letterSpacing:"0.1em",margin:0 }}>
-            Built by <span style={{ color:"rgba(255,224,72,0.32)" }}>@imaesr</span> for the GVC Vibeathon
+        <div style={{ marginTop:36,textAlign:"center" }}>
+          <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.13)",letterSpacing:"0.1em",margin:0 }}>
+            Built by <span style={{ color:"rgba(255,224,72,0.3)" }}>@imaesr</span> for the GVC Vibeathon
           </p>
         </div>
       </main>
