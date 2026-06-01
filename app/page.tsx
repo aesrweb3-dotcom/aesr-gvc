@@ -655,7 +655,7 @@ export default function Page(){
                   <div style={{ position:"absolute",bottom:18,left:0,right:0,display:"flex",justifyContent:"space-around",paddingLeft:"8%",paddingRight:"8%",zIndex:3 }}>
                     {PACK_TIERS.map((t,i)=>(
                       <div key={i} className={phase==="READY"||phase==="PIN"?"pack-swing":""} style={{ animationDelay:`${i*.4}s` }}>
-                        <MiniPack tier={t} grabbed={grabbedIdx===i&&(phase==="GRABBING"||phase==="LIFTING"||phase==="CHUTE"||phase==="TEARING"||phase==="CARD")}/>
+                        <MiniPack tier={t} grabbed={grabbedIdx===i&&(phase==="GRABBING"||phase==="LIFTING"||phase==="CHUTE")}/>
                       </div>
                     ))}
                   </div>
