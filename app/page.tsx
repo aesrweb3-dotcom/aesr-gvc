@@ -2,48 +2,106 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import * as sfx from "@/lib/sfx";
+import {
+  generateBattleCard, compareCards, generateCpuDeck, randomCard,
+  ROUND_STATS, STAT_LABELS,
+} from "@/lib/battle";
+import type {
+  BattleCard, BattleTier, RoundStat, RoundResult,
+  BattleMode, Screen, ArenaPhase, BattleResult,
+} from "@/lib/battle";
 import { WalletConnect } from "@/components/WalletConnect";
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+// ─── COLOR CONSTANTS ─────────────────────────────────────────────────────────
 
-const ALL_BADGES = [
-  "astro_balls", "zoom_in_vibe_out", "showtime", "flow_state",
-  "vibestr_bronze_tier", "checkmate", "vibefoot_fan_club", "suited_up",
-  "astro_bean", "gud_meat", "hoodie_up_society", "twenty_badges",
-  "yin_n_yang", "vibestr_pink_tier", "party_in_the_back",
-  "unfathomable_vibes", "gradient_hatrick", "one_of_one",
-  "fifty_badges", "cosmic_guardian", "super_rare", "pothead",
-  "elite_rainbow_ranger", "anchorman", "rainbow_visor",
-];
+const C = {
+  mint:      "#98f5c4",
+  coral:     "#ff6b8a",
+  sky:       "#74d7f7",
+  lavender:  "#c084fc",
+  sunshine:  "#FFE048",
+  peach:     "#ffb347",
+  white:     "#ffffff",
+  dark:      "#0f0f1e",
+};
 
-const ARCHETYPES = [
-  "The Cosmic Drifter", "The Neon Prophet", "The Vibe Architect",
-  "The Golden Wanderer", "The Drift King", "The Frequency Holder",
-  "The Stellar Nomad", "The Radiant Sage", "The Vibe Curator",
-  "The Etheric Rebel", "The Sound Alchemist", "The Neon Mystic",
-  "The Light Chaser", "The Groove Oracle", "The Vibe Sovereign",
-  "The Chromatic Shaman", "The Signal Rider", "The Vibe Phantom",
-  "The Astral Cowboy", "The Frequency Mage",
-];
+const TIER_COLORS: Record<BattleTier, { border: string; glow: string; label: string }> = {
+  Common:    { border: C.sky,      glow: "rgba(116,215,247,0.6)",  label: "#74d7f7" },
+  Rare:      { border: C.lavender, glow: "rgba(192,132,252,0.7)",  label: "#c084fc" },
+  Legendary: { border: C.sunshine, glow: "rgba(255,224,72,0.85)",  label: "#FFE048" },
+};
 
-const QUOTES = [
-  "Tuned to frequencies others can't hear.",
-  "The vibe doesn't lie.",
-  "Every pixel carries a story.",
-  "Born in the blockchain, raised by the beat.",
-  "Rare by nature. Legendary by choice.",
-  "The universe assigned this energy.",
-  "Vibes travel at the speed of light.",
-  "Not all treasure is silver and gold.",
-  "The chain knows what the eye can't see.",
-  "Frequency: locked. Vibe: immaculate.",
-  "Some are minted, some are chosen.",
-  "The future belongs to the curious.",
-  "Running on pure good energy since genesis.",
-  "Calibrated for maximum vibe output.",
-  "The shaka is eternal.",
-];
+const STAT_COLORS: Record<RoundStat, string> = {
+  RARITY: C.coral,
+  DRIP:   C.sky,
+  ENERGY: C.mint,
+  AURA:   C.lavender,
+  TOTAL:  C.sunshine,
+};
+
+// ─── CSS ANIMATIONS ───────────────────────────────────────────────────────────
+
+const GAME_CSS = `
+@keyframes bgPulse { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+@keyframes floatCard { 0%,100%{transform:translateY(0px) rotate(var(--r))} 50%{transform:translateY(-16px) rotate(calc(var(--r) + 4deg))} }
+@keyframes popIn { 0%{transform:scale(0);opacity:0} 80%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+@keyframes confettiFall { 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+@keyframes shimmerText { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes screenShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-5px)} 80%{transform:translateX(5px)} }
+@keyframes pulseGlow { 0%,100%{opacity:.6} 50%{opacity:1} }
+@keyframes cardEntrance { 0%{transform:translateY(-60px) scale(.7);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
+@keyframes gvc-spin { to { transform: rotate(360deg); } }
+@keyframes card-shimmer {
+  0%   { transform: translateX(-220%) skewX(-14deg); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(440%) skewX(-14deg); opacity: 0; }
+}
+@keyframes legendary-glow {
+  0%,100% { box-shadow: 0 0 32px rgba(255,224,72,0.70), 0 0 64px rgba(255,95,31,0.35), 0 0 100px rgba(255,224,72,0.12); }
+  50%      { box-shadow: 0 0 44px rgba(255,224,72,0.90), 0 0 88px rgba(255,95,31,0.55), 0 0 130px rgba(255,224,72,0.20); }
+}
+@keyframes lgd-rise {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.9; }
+  80%  { opacity: 0.6; }
+  100% { transform: translate(calc((var(--drift, 0) - 0.5) * 40px), -120px) scale(0.2); opacity: 0; }
+}
+@keyframes rare-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  30%      { opacity: 1; transform: scale(1.4) rotate(120deg); }
+  60%      { opacity: 0.8; transform: scale(1) rotate(240deg); }
+}
+.vb-bg { background:linear-gradient(-45deg,#1a0340,#0a1a40,#0d2030,#1a0240,#0a0a30); background-size:400% 400%; animation:bgPulse 14s ease infinite; }
+.shimmer-title { background:linear-gradient(110deg,#FFE048,#98f5c4,#74d7f7,#c084fc,#ff6b8a,#FFE048); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; animation:shimmerText 3s linear infinite; }
+.card-rotator { -webkit-transform-style:preserve-3d; transform-style:preserve-3d; }
+.perspective-wrap { -webkit-perspective:1200px; perspective:1200px; }
+.card-face { -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+.arena-shake { animation:screenShake .35s ease-out; }
+.gvc-spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid #FFE048; border-top-color: transparent;
+  animation: gvc-spin 0.8s linear infinite;
+}
+.card-shimmer {
+  background: linear-gradient(108deg, transparent 38%, rgba(255,224,72,0.07) 50%, transparent 62%);
+  animation: card-shimmer 3.5s ease-in-out infinite;
+}
+.lgd-ember {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #FF7A00;
+  box-shadow: 0 0 8px #FF7A00, 0 0 16px rgba(255,122,0,0.5);
+  animation: lgd-rise 3s ease-out infinite;
+}
+.rare-spark {
+  width: 6px; height: 6px;
+  background: #c084fc;
+  box-shadow: 0 0 8px #c084fc, 0 0 14px rgba(192,132,252,0.5);
+  animation: rare-sparkle 2.4s ease-in-out infinite;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; }
+input[type=number] { -moz-appearance:textfield; }
+`;
 
 // ─── SEEDED RNG ───────────────────────────────────────────────────────────────
 
@@ -55,87 +113,113 @@ function seededRNG(seed: number) {
   };
 }
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
+// ─── WEB AUDIO SOUNDS ────────────────────────────────────────────────────────
 
-type Tier = "Common" | "Rare" | "Legendary";
-
-interface CardData {
-  rarity: number; drip: number; energy: number; aura: number;
-  tier: Tier; rank: number; archetype: string; quote: string; badges: string[];
-}
-
-// ─── CARD DATA ────────────────────────────────────────────────────────────────
-
-function generateCardData(id: number): CardData {
-  const rng    = seededRNG(id);
-  const rarity = 29 + Math.floor(rng() * 71);
-  const drip   = 19 + Math.floor(rng() * 81);
-  const energy = 19 + Math.floor(rng() * 81);
-  const aura   = 19 + Math.floor(rng() * 81);
-  const tier: Tier = rarity >= 90 ? "Legendary" : rarity >= 70 ? "Rare" : "Common";
-  const total  = rarity + drip + energy + aura;
-  const rank   = Math.max(1, Math.round(((396 - total) / (396 - 86)) * 6967) + 1);
-  const archetype = ARCHETYPES[Math.floor(rng() * ARCHETYPES.length)];
-  const quote     = QUOTES[Math.floor(rng() * QUOTES.length)];
-  const badgeCount = tier === "Legendary" ? 5 : tier === "Rare" ? 4 : 3;
-  const pool = [...ALL_BADGES];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+function getAudio(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  if (!w.__ac) {
+    try { w.__ac = new (window.AudioContext || (window as any).webkitAudioContext)(); } catch { return null; }
   }
-  return { rarity, drip, energy, aura, tier, rank, archetype, quote, badges: pool.slice(0, badgeCount) };
+  return w.__ac as AudioContext;
 }
 
-// ─── TIER THEME ───────────────────────────────────────────────────────────────
+function sfxClick() {
+  const ac = getAudio(); if (!ac) return;
+  const o = ac.createOscillator(); const g = ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.frequency.value = 880; o.type = "sine";
+  g.gain.setValueAtTime(0.18, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.08);
+  o.start(ac.currentTime); o.stop(ac.currentTime + 0.08);
+}
 
-const TIER_BORDER: Record<Tier, string> = {
-  Common: "#FFE048", Rare: "#A855F7", Legendary: "#FFE048",
-};
-const TIER_LABEL_COLOR: Record<Tier, string> = {
-  Common: "#FFE048", Rare: "#A855F7", Legendary: "#FF5F1F",
-};
-const TIER_GLOW: Record<Tier, string> = {
-  Common:    "0 0 22px rgba(255,224,72,0.35), 0 0 44px rgba(255,224,72,0.12)",
-  Rare:      "0 0 22px rgba(168,85,247,0.50), 0 0 44px rgba(168,85,247,0.18)",
-  Legendary: "0 0 32px rgba(255,224,72,0.70), 0 0 64px rgba(255,95,31,0.35), 0 0 100px rgba(255,224,72,0.12)",
-};
+function sfxCardPlay() {
+  const ac = getAudio(); if (!ac) return;
+  const o = ac.createOscillator(); const g = ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type = "sine";
+  o.frequency.setValueAtTime(200, ac.currentTime);
+  o.frequency.exponentialRampToValueAtTime(1000, ac.currentTime + 0.2);
+  g.gain.setValueAtTime(0.22, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.2);
+  o.start(ac.currentTime); o.stop(ac.currentTime + 0.22);
+}
 
-// ─── RESPONSIVE CARD SIZE ─────────────────────────────────────────────────────
+function sfxClash() {
+  const ac = getAudio(); if (!ac) return;
+  // low thud
+  const o = ac.createOscillator(); const g = ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type = "sine";
+  o.frequency.setValueAtTime(100, ac.currentTime);
+  o.frequency.exponentialRampToValueAtTime(40, ac.currentTime + 0.4);
+  g.gain.setValueAtTime(0.3, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.4);
+  o.start(ac.currentTime); o.stop(ac.currentTime + 0.4);
+  // noise burst
+  const buf = ac.createBuffer(1, ac.sampleRate * 0.1, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.15;
+  const src = ac.createBufferSource(); const ng = ac.createGain();
+  src.buffer = buf; src.connect(ng); ng.connect(ac.destination);
+  ng.gain.setValueAtTime(0.3, ac.currentTime);
+  ng.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.1);
+  src.start(ac.currentTime);
+}
 
-const DESIGN_W = 420;
-const DESIGN_H = 588;
-
-function useCardSize() {
-  const [cardW, setCardW] = useState(() => {
-    if (typeof window === "undefined") return DESIGN_W;
-    const vw = window.innerWidth;
-    return vw < 600
-      ? Math.round(vw * 0.9)
-      : Math.min(DESIGN_W, Math.max(380, vw - 80));
+function sfxRoundWin() {
+  const ac = getAudio(); if (!ac) return;
+  const notes = [261.63, 329.63, 392]; // C-E-G
+  notes.forEach((freq, i) => {
+    const o = ac.createOscillator(); const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = "triangle"; o.frequency.value = freq;
+    const t = ac.currentTime + i * 0.1;
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.start(t); o.stop(t + 0.2);
   });
-  useEffect(() => {
-    const update = () => {
-      const vw = window.innerWidth;
-      setCardW(vw < 600
-        ? Math.round(vw * 0.9)
-        : Math.min(DESIGN_W, Math.max(380, vw - 80)));
-    };
-    window.addEventListener("resize", update, { passive: true });
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return { cardW, cardH: Math.round(cardW * DESIGN_H / DESIGN_W), scale: cardW / DESIGN_W };
 }
 
-// ─── FALLBACK ART ─────────────────────────────────────────────────────────────
+function sfxRoundLose() {
+  const ac = getAudio(); if (!ac) return;
+  const o = ac.createOscillator(); const g = ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type = "sine";
+  o.frequency.setValueAtTime(350, ac.currentTime);
+  o.frequency.exponentialRampToValueAtTime(80, ac.currentTime + 0.4);
+  g.gain.setValueAtTime(0.2, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.4);
+  o.start(ac.currentTime); o.stop(ac.currentTime + 0.42);
+}
+
+function sfxVictory() {
+  const ac = getAudio(); if (!ac) return;
+  const notes = [261.63, 329.63, 392, 523.25, 659.25, 783.99]; // C-E-G-C'-E'-G'
+  notes.forEach((freq, i) => {
+    const o = ac.createOscillator(); const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = "triangle"; o.frequency.value = freq;
+    const t = ac.currentTime + i * 0.1;
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    o.start(t); o.stop(t + 0.28);
+  });
+}
+
+// ─── PALETTES (for FallbackArt) ───────────────────────────────────────────────
 
 const PALETTES = [
-  ["#C084FC", "#6366F1", "#FFE048"],   // purple/indigo/gold
-  ["#A855F7", "#EC4899", "#FF5F1F"],   // purple/pink/orange
-  ["#3B82F6", "#6366F1", "#C084FC"],   // blue/indigo/purple
-  ["#FF5F1F", "#FFE048", "#C084FC"],   // orange/gold/purple
-  ["#06B6D4", "#3B82F6", "#A855F7"],   // cyan/blue/purple
-  ["#FFE048", "#FF7A00", "#A855F7"],   // gold/amber/purple
+  ["#C084FC", "#6366F1", "#FFE048"],
+  ["#A855F7", "#EC4899", "#FF5F1F"],
+  ["#3B82F6", "#6366F1", "#C084FC"],
+  ["#FF5F1F", "#FFE048", "#C084FC"],
+  ["#06B6D4", "#3B82F6", "#A855F7"],
+  ["#FFE048", "#FF7A00", "#A855F7"],
 ];
+
+// ─── FALLBACK ART ─────────────────────────────────────────────────────────────
 
 function FallbackArt({ id }: { id: number }) {
   const rng     = seededRNG(id * 3571 + 13);
@@ -165,14 +249,11 @@ function FallbackArt({ id }: { id: number }) {
         ))}
         <filter id={`${uid}-blur`}><feGaussianBlur stdDeviation="3" /></filter>
       </defs>
-      {/* Rich deep base */}
       <rect width="100" height="140" fill="#05040f" />
-      {/* Saturated colour blobs — no grid, pure abstract art */}
       {blobs.map((b, i) => (
         <ellipse key={i} cx={b.cx} cy={b.cy} rx={b.rx} ry={b.ry}
           fill={`url(#${uid}-g${i})`} filter={`url(#${uid}-blur)`} />
       ))}
-      {/* Ghost token number — purely decorative, very faint */}
       <text x="50" y="70" textAnchor="middle" dominantBaseline="middle"
         fill="rgba(255,255,255,0.04)" fontSize="18" fontFamily="serif" fontWeight="900" letterSpacing="4">
         #{id}
@@ -181,503 +262,310 @@ function FallbackArt({ id }: { id: number }) {
   );
 }
 
-// ─── TIER BURST (one-shot particles on card reveal) ───────────────────────────
+// ─── CONFETTI ─────────────────────────────────────────────────────────────────
 
-function TierBurst({ tier, id, nftColors }: { tier: Tier; id: number; nftColors?: string[] }) {
-  const rng = seededRNG(id * 4321 + 99);
-  const baseColors = {
-    Common:    ["#FFE048", "#FFF3A0", "#FFD700", "#FFFFFF", "#A3E635"],
-    Rare:      ["#A855F7", "#C084FC", "#7C3AED", "#EC4899", "#60A5FA"],
-    Legendary: ["#FF7A00", "#FFE048", "#FF5F1F", "#FBBF24", "#F97316"],
-  };
-  const colors = [
-    ...baseColors[tier],
-    ...(nftColors ?? []),
-  ];
-  const count = { Common: 28, Rare: 40, Legendary: 55 }[tier];
+const CONFETTI_COLORS = [C.mint, C.coral, C.sky, C.lavender, C.sunshine, C.peach];
 
-  const particles = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * 360 + rng() * 28;
-    const dist  = 100 + rng() * 220;
-    const rad   = angle * Math.PI / 180;
-    const size  = 4 + Math.floor(rng() * 10);
-    return {
-      tx:    Math.cos(rad) * dist,
-      ty:    Math.sin(rad) * dist,
-      size,
-      color: colors[Math.floor(rng() * colors.length)],
-      delay: rng() * 0.3,
-      dur:   1.0 + rng() * 1.0,
-    };
-  });
-
+function Confetti() {
+  const pieces = Array.from({ length: 60 }, (_, i) => ({
+    x: Math.random() * 100,
+    delay: Math.random() * 2,
+    dur: 2.5 + Math.random() * 2,
+    size: 6 + Math.random() * 6,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  }));
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible", zIndex: 20 }}>
-      {particles.map((p, i) => (
+    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden" }}>
+      {pieces.map((p, i) => (
         <motion.div
           key={i}
-          style={{
-            position: "absolute", left: "50%", top: "45%",
-            width: p.size, height: p.size,
-            marginLeft: -p.size / 2, marginTop: -p.size / 2,
-            borderRadius: "50%", background: p.color,
-            boxShadow: `0 0 ${p.size * 3}px ${p.color}, 0 0 ${p.size * 6}px ${p.color}60`,
-          }}
-          initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-          animate={{ x: p.tx, y: p.ty, opacity: 0, scale: 0 }}
-          transition={{ duration: p.dur, delay: p.delay, ease: [0.23, 1, 0.32, 1] }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── TIER AURA (ongoing effects) ──────────────────────────────────────────────
-
-const AURA_LEFT = ["8%","20%","35%","50%","65%","80%","92%","14%","58%","78%"];
-const AURA_DELAY = ["0s","1.1s","2.2s","0.5s","1.7s","2.9s","0.8s","2.0s","1.4s","0.2s"];
-
-function TierAura({ tier }: { tier: Tier }) {
-  if (tier === "Common") return null;
-  const cls = tier === "Legendary" ? "lgd-ember" : "rare-spark";
-  const count = tier === "Legendary" ? 10 : 7;
-  return (
-    <div style={{ position: "absolute", inset: -30, pointerEvents: "none", overflow: "visible", zIndex: 2 }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div
-          key={i}
-          className={cls}
           style={{
             position: "absolute",
-            left: AURA_LEFT[i % AURA_LEFT.length],
-            bottom: `${(i * 13) % 40}%`,
-            animationDelay: AURA_DELAY[i % AURA_DELAY.length],
+            left: `${p.x}%`,
+            top: -20,
+            width: p.size,
+            height: p.size,
+            background: p.color,
+            borderRadius: 2,
           }}
+          animate={{ y: "110vh", rotate: 720, opacity: [1, 1, 0] }}
+          transition={{ duration: p.dur, delay: p.delay, ease: "linear" }}
         />
       ))}
     </div>
   );
 }
 
-// ─── BACKGROUND ORBS ─────────────────────────────────────────────────────────
+// ─── FLOATING CARDS (background) ─────────────────────────────────────────────
 
-const ORB_DEFS = [
-  { x: "18%", y: "18%", size: 700, color: "rgba(139,92,246,0.14)",  delay: 0,  dur: 28 }, // purple
-  { x: "78%", y: "55%", size: 750, color: "rgba(236,72,153,0.10)",  delay: 7,  dur: 34 }, // pink
-  { x: "48%", y: "92%", size: 860, color: "rgba(255,224,72,0.07)",  delay: 3,  dur: 44 }, // gold
-  { x: "88%", y: "8%",  size: 520, color: "rgba(20,184,166,0.09)",  delay: 14, dur: 22 }, // teal
-  { x: "8%",  y: "72%", size: 620, color: "rgba(168,85,247,0.11)",  delay: 5,  dur: 32 }, // purple 2
-  { x: "58%", y: "32%", size: 580, color: "rgba(245,158,11,0.08)",  delay: 19, dur: 38 }, // amber
-];
-
-function BackgroundOrbs() {
+function FloatingCards() {
+  const cards = [
+    { left: "5%",  top: "15%", r: "-8deg"  },
+    { left: "85%", top: "10%", r: "12deg"  },
+    { left: "2%",  top: "60%", r: "5deg"   },
+    { left: "88%", top: "55%", r: "-15deg" },
+    { left: "45%", top: "5%",  r: "3deg"   },
+    { left: "50%", top: "80%", r: "-6deg"  },
+  ];
   return (
     <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-      {ORB_DEFS.map((orb, i) => (
-        <motion.div
+      {cards.map((c, i) => (
+        <div
           key={i}
           style={{
-            position: "absolute", left: orb.x, top: orb.y,
-            width: orb.size, height: orb.size, borderRadius: "50%",
-            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
-            filter: "blur(55px)", x: "-50%", y: "-50%",
+            position: "absolute",
+            left: c.left,
+            top: c.top,
+            width: 70,
+            height: 100,
+            borderRadius: 12,
+            border: "2px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.04)",
+            animation: `floatCard ${7 + i}s ease-in-out infinite`,
+            ["--r" as any]: c.r,
+            transform: `rotate(${c.r})`,
           }}
-          animate={{ x: ["−50%", "-50%"], translateX: [0, 28, -18, 12, 0], translateY: [0, -22, 16, -9, 0] }}
-          transition={{ duration: orb.dur, delay: orb.delay, repeat: Infinity, ease: "easeInOut" }}
         />
       ))}
     </div>
   );
 }
 
-// ─── WATERMARK ────────────────────────────────────────────────────────────────
+// ─── BATTLE CARD MINI ─────────────────────────────────────────────────────────
 
-function Watermark() { return null; }
+interface BattleCardMiniProps {
+  card: BattleCard;
+  selected?: boolean;
+  onSelect?: () => void;
+  disabled?: boolean;
+  faceDown?: boolean;
+}
 
-// ─── RGB TO HSL HELPER ───────────────────────────────────────────────────────
-function rgbToHsl(r: number, g: number, b: number) {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r,g,b), min = Math.min(r,g,b);
-  let h = 0, s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = ((g-b)/d + (g<b?6:0)) / 6; break;
-      case g: h = ((b-r)/d + 2) / 6; break;
-      case b: h = ((r-g)/d + 4) / 6; break;
-    }
-    h *= 360;
+function BattleCardMini({ card, selected, onSelect, disabled, faceDown }: BattleCardMiniProps) {
+  const [imgState, setImgState] = useState<"loading" | "loaded" | "error">("loading");
+  const tc = TIER_COLORS[card.tier];
+  return (
+    <motion.div
+      onClick={() => { if (!disabled && onSelect) { sfxClick(); onSelect(); } }}
+      whileTap={!disabled ? { scale: 0.93 } : {}}
+      style={{
+        width: 64, height: 88, borderRadius: 10, overflow: "hidden",
+        border: selected ? `2px solid ${C.sunshine}` : `2px solid ${tc.border}`,
+        boxShadow: selected
+          ? `0 0 16px ${C.sunshine}, 0 0 32px rgba(255,224,72,0.4)`
+          : `0 0 10px ${tc.glow}`,
+        cursor: disabled ? "default" : "pointer",
+        position: "relative",
+        transform: selected ? "scale(1.08)" : undefined,
+        transition: "transform 0.15s, box-shadow 0.15s",
+        flexShrink: 0,
+        background: "#0f0f1e",
+      }}
+    >
+      {faceDown ? (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(135deg, #1a0340, #0a1a40)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/shaka.png" alt="" style={{ width: 28, height: 28, opacity: 0.5 }} />
+        </div>
+      ) : (
+        <>
+          {imgState !== "loaded" && (
+            <div style={{ position: "absolute", inset: 0 }}>
+              {imgState === "error" ? <FallbackArt id={card.tokenId} /> : (
+                <div style={{ position: "absolute", inset: 0, background: "#0f0f1e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div className="gvc-spinner" style={{ width: 18, height: 18, border: "2px solid #FFE048", borderTopColor: "transparent" }} />
+                </div>
+              )}
+            </div>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/portrait/${card.tokenId}`}
+            alt={`GVC #${card.tokenId}`}
+            style={{
+              position: "absolute", inset: 0,
+              width: "100%", height: "100%",
+              objectFit: "cover", objectPosition: "center top",
+              display: imgState === "loaded" ? "block" : "none",
+            }}
+            onLoad={() => setImgState("loaded")}
+            onError={() => setImgState("error")}
+          />
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0,
+            background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)",
+            padding: "10px 3px 3px",
+            fontSize: 8, color: "rgba(255,255,255,0.7)",
+            textAlign: "center", fontFamily: "var(--font-mundial)",
+          }}>
+            #{card.tokenId}
+          </div>
+        </>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── BATTLE CARD FULL ─────────────────────────────────────────────────────────
+
+interface BattleCardFullProps {
+  card: BattleCard;
+  highlightStat?: RoundStat;
+  winner?: boolean;
+  loser?: boolean;
+  faceDown?: boolean;
+}
+
+function BattleCardFull({ card, highlightStat, winner, loser, faceDown }: BattleCardFullProps) {
+  const [imgState, setImgState] = useState<"loading" | "loaded" | "error">("loading");
+  const tc = TIER_COLORS[card.tier];
+
+  if (faceDown) {
+    return (
+      <div style={{
+        width: 155, height: 210, borderRadius: 14,
+        background: "linear-gradient(135deg,#1a0340,#0a1a40,#0d1a2e)",
+        border: `2px solid rgba(255,255,255,0.12)`,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
+        flexShrink: 0,
+      }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 40, height: 40, opacity: 0.6 }} />
+        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)", letterSpacing: "0.1em" }}>???</span>
+      </div>
+    );
   }
-  return { h, s, l };
-}
 
-// ─── VIBE CARD ────────────────────────────────────────────────────────────────
-
-interface VibeCardProps {
-  id: number;
-  data: CardData;
-  frontRef: React.RefObject<HTMLDivElement>;
-  onFirstReveal?: () => void;
-  onNftColors?: (colors: string[]) => void;
-}
-
-function VibeCard({ id, data, frontRef, onFirstReveal, onNftColors }: VibeCardProps) {
-  const { cardW, cardH, scale } = useCardSize();
-  const [flipped,   setFlipped]   = useState(false);
-  const [tilt,      setTilt]      = useState({ x: 0, y: 0 });
-  const [dragging,  setDragging]  = useState(false);
-  const [holo,      setHolo]      = useState({ x: 50, y: 50 });
-  const [imgState,  setImgState]  = useState<"loading" | "loaded" | "error">("loading");
-  const [nftColors, setNftColors] = useState<string[]>([]);
-  const drag = useRef({ sx: 0, sy: 0, tx: 0, ty: 0, moved: false, down: false });
-
-  const sampleNFTColors = useCallback((img: HTMLImageElement) => {
-    try {
-      const cv = document.createElement("canvas");
-      cv.width = 40; cv.height = 40;
-      const c = cv.getContext("2d"); if (!c) return;
-      c.drawImage(img, 0, 0, 40, 40);
-      const { data } = c.getImageData(0, 0, 40, 40);
-      const map = new Map<string, number>();
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-        if (a < 200) continue;
-        const qr = Math.round(r/28)*28, qg = Math.round(g/28)*28, qb = Math.round(b/28)*28;
-        const k = `${qr},${qg},${qb}`;
-        map.set(k, (map.get(k)??0)+1);
-      }
-      const sorted = [...map.entries()]
-        .filter(([k]) => {
-          const [r,g,b] = k.split(",").map(Number);
-          const { s, l } = rgbToHsl(r,g,b);
-          return s > 0.28 && l > 0.15 && l < 0.88;
-        })
-        .sort((a,b) => b[1]-a[1]);
-      const picked: string[] = [];
-      for (const [k] of sorted) {
-        const [r,g,b] = k.split(",").map(Number);
-        const { h } = rgbToHsl(r,g,b);
-        if (!picked.some(p => {
-          const [pr,pg,pb] = p.split(",").map(Number);
-          return Math.abs(rgbToHsl(pr,pg,pb).h - h) < 45;
-        })) {
-          picked.push(k);
-          if (picked.length >= 3) break;
-        }
-      }
-      const colors = picked.map(k => { const [r,g,b]=k.split(",").map(Number); return `rgb(${r},${g},${b})`; });
-      setNftColors(colors);
-      onNftColors?.(colors);
-    } catch {}
-  }, [onNftColors]);
-
-  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { sx: e.clientX, sy: e.clientY, tx: tilt.x, ty: tilt.y, moved: false, down: true };
-    setDragging(true);
-  };
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!drag.current.down) return;
-    const dx = e.clientX - drag.current.sx;
-    const dy = e.clientY - drag.current.sy;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
-    const r = e.currentTarget.getBoundingClientRect();
-    setHolo({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
-    setTilt({
-      x: Math.max(-20, Math.min(20, drag.current.tx - dy * 0.2)),
-      y: Math.max(-30, Math.min(30, drag.current.ty + dx * 0.35)),
-    });
-  };
-  const onUp = () => {
-    if (!drag.current.down) return;
-    drag.current.down = false;
-    setDragging(false);
-    if (!drag.current.moved) { sfx.flip(); setFlipped(f => !f); }
-    setTilt({ x: 0, y: 0 });
+  const cardStyle: React.CSSProperties = {
+    width: 155, height: 210, borderRadius: 14, overflow: "hidden",
+    border: `2px solid ${winner ? C.mint : loser ? "rgba(255,255,255,0.15)" : tc.border}`,
+    boxShadow: winner
+      ? `0 0 24px rgba(152,245,196,0.7), 0 0 48px rgba(152,245,196,0.3)`
+      : loser
+      ? "none"
+      : `0 0 14px ${tc.glow}`,
+    position: "relative",
+    background: "#0a0a16",
+    transform: winner ? "scale(1.06)" : loser ? "scale(0.92)" : "scale(1)",
+    filter: loser ? "grayscale(0.6) brightness(0.75)" : undefined,
+    transition: "transform 0.3s, filter 0.3s",
+    flexShrink: 0,
   };
 
-  const { rarity, drip, energy, aura, tier, rank, archetype, quote, badges } = data;
-  const isLegendary = tier === "Legendary";
-  const totalRotY   = (flipped ? 180 : 0) + tilt.y;
+  const stats: [RoundStat, number][] = [
+    ["RARITY", card.rarity],
+    ["DRIP",   card.drip],
+    ["ENERGY", card.energy],
+    ["AURA",   card.aura],
+  ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {/* Card + aura wrapper */}
-      <div style={{ position: "relative" }}>
-        {/* NFT-colour sampled pulsing glow */}
-        {nftColors.length >= 1 && (
-          <motion.div
-            style={{ position: "absolute", inset: -6, borderRadius: 22, zIndex: 0, pointerEvents: "none" }}
-            animate={{ boxShadow: [
-              `0 0 50px ${nftColors[0]}70, 0 0 100px ${nftColors[0]}35${nftColors[1] ? `, 0 0 140px ${nftColors[1]}20` : ""}`,
-              `0 0 80px ${nftColors[0]}95, 0 0 150px ${nftColors[0]}55${nftColors[1] ? `, 0 0 200px ${nftColors[1]}35` : ""}`,
-              `0 0 50px ${nftColors[0]}70, 0 0 100px ${nftColors[0]}35${nftColors[1] ? `, 0 0 140px ${nftColors[1]}20` : ""}`,
-            ]}}
-            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
-        <TierAura tier={tier} />
-
-        {/* Perspective container — matches scaled card dimensions */}
-        <div className="perspective-wrap" style={{ width: cardW, height: cardH, display: "flex", alignItems: "center", justifyContent: "center", overflow: "visible" }}>
-          {/* 3-D rotator at full design size, scaled to fit */}
-          <div
-            className="card-rotator"
-            onPointerDown={onDown}
-            onPointerMove={onMove}
-            onPointerUp={onUp}
-            style={{
-              width: DESIGN_W, height: DESIGN_H,
-              position: "relative",
-              transformOrigin: "center center",
-              transform: `scale(${scale}) rotateX(${tilt.x}deg) rotateY(${totalRotY}deg)`,
-              transition: dragging ? "none" : "transform 0.6s cubic-bezier(0.175,0.885,0.32,1.275)",
-              cursor: dragging ? "grabbing" : "grab",
-              userSelect: "none",
-              touchAction: "none",
-              willChange: "transform",
-            }}
-          >
-            {/* ── FRONT ── */}
-            <div
-              ref={frontRef}
-              className="card-face"
-              style={{
-                position: "absolute", inset: 0, borderRadius: 16,
-                overflow: "hidden", background: "#050505",
-                border: `2px solid ${TIER_BORDER[tier]}`,
-                boxShadow: TIER_GLOW[tier],
-                animation: isLegendary ? "legendary-glow 2.4s ease-in-out infinite" : undefined,
-                transform: "translateZ(0.01px)",
-              }}
-            >
-              {/* Portrait / fallback */}
-              <div style={{ position: "absolute", inset: 0 }}>
-                {imgState === "loading" && (
-                  <div style={{
-                    position: "absolute", inset: 0,
-                    background: "linear-gradient(135deg,#151510 0%,#0d0d16 100%)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <div className="gvc-spinner" />
-                  </div>
-                )}
-                {imgState === "error" && <FallbackArt id={id} />}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/portrait/${id}`}
-                  alt={`GVC #${id}`}
-                  style={{
-                    position: "absolute", inset: 0,
-                    width: "100%", height: "100%",
-                    objectFit: "cover", objectPosition: "center top",
-                    display: imgState === "loaded" ? "block" : "none",
-                  }}
-                  onLoad={e => { setImgState("loaded"); sampleNFTColors(e.currentTarget); }}
-                  onError={() => setImgState("error")}
-                />
-              </div>
-
-              {/* Top strip */}
-              <div style={{
-                position: "absolute", top: 0, left: 0, right: 0, zIndex: 5,
-                padding: "10px 12px",
-                background: "linear-gradient(to bottom, rgba(5,5,5,0.92) 0%, transparent 100%)",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}>
-                <span style={{ fontFamily: "var(--font-mundial)", fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  GVC #{id}
-                </span>
-                <span style={{
-                  fontFamily: "var(--font-brice)", fontSize: 10, fontWeight: 900,
-                  color: TIER_LABEL_COLOR[tier], letterSpacing: "0.15em", textTransform: "uppercase",
-                  padding: "2px 8px", borderRadius: 4,
-                  border: `1px solid ${TIER_LABEL_COLOR[tier]}`,
-                  background: `${TIER_LABEL_COLOR[tier]}18`,
-                }}>
-                  {tier}
-                </span>
-              </div>
-
-              {/* Rainbow holographic foil — shifts with tilt angle */}
-              <div style={{
-                position: "absolute", inset: 0, zIndex: 6, pointerEvents: "none",
-                background: [
-                  `linear-gradient(${125 + tilt.y * 2.5 + tilt.x * 1.2}deg,`,
-                  `  hsla(${(holo.x * 3.6 + 0)  % 360}, 100%, 65%, 0) 0%,`,
-                  `  hsla(${(holo.x * 3.6 + 40) % 360}, 100%, 65%, 0.18) 20%,`,
-                  `  hsla(${(holo.x * 3.6 + 80) % 360}, 100%, 65%, 0.22) 40%,`,
-                  `  hsla(${(holo.x * 3.6 + 120)% 360}, 100%, 65%, 0.18) 60%,`,
-                  `  hsla(${(holo.x * 3.6 + 200)% 360}, 100%, 65%, 0.12) 80%,`,
-                  `  hsla(${(holo.x * 3.6 + 280)% 360}, 100%, 65%, 0) 100%)`,
-                ].join(""),
-                mixBlendMode: "color-dodge" as React.CSSProperties["mixBlendMode"],
-                opacity: Math.min(1, 0.1 + Math.sqrt(tilt.x ** 2 + tilt.y ** 2) / 36),
-              }} />
-
-              {/* Legendary foil sweep */}
-              {isLegendary && (
-                <div className="card-shimmer" style={{ position: "absolute", inset: 0, zIndex: 7, pointerEvents: "none" }} />
+    <div style={{ position: "relative" }}>
+      <div style={cardStyle}>
+        {/* Portrait area (top 55%) */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "55%" }}>
+          {imgState !== "loaded" && (
+            <div style={{ position: "absolute", inset: 0 }}>
+              {imgState === "error" ? <FallbackArt id={card.tokenId} /> : (
+                <div style={{ position: "absolute", inset: 0, background: "#0f0f1e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div className="gvc-spinner" style={{ width: 20, height: 20, border: "2px solid #FFE048", borderTopColor: "transparent" }} />
+                </div>
               )}
-
-              {/* Bottom fade */}
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0, height: "60%", zIndex: 8,
-                background: "linear-gradient(to top, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.86) 36%, rgba(5,5,5,0.34) 66%, transparent 100%)",
-              }} />
-
-              {/* Bottom content */}
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 16px 18px", zIndex: 9 }}>
-                <div style={{ display: "flex", gap: 6, marginBottom: 11, flexWrap: "wrap" }}>
-                  {badges.map(b => (
-                    <div key={b} style={{
-                      width: 36, height: 36, borderRadius: 8, overflow: "hidden", flexShrink: 0,
-                      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,224,72,0.2)",
-                    }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    </div>
-                  ))}
-                </div>
-
-                <p style={{
-                  fontFamily: "var(--font-brice)", fontSize: 21, fontWeight: 900,
-                  color: "#FFE048", margin: 0, textTransform: "uppercase",
-                  letterSpacing: "0.03em", lineHeight: 1.1,
-                  textShadow: "0 0 26px rgba(255,224,72,0.65)",
-                }}>
-                  {archetype}
-                </p>
-                <p style={{
-                  fontFamily: "var(--font-mundial)", fontSize: 11, fontStyle: "italic",
-                  color: "rgba(255,255,255,0.48)", margin: "4px 0 12px", lineHeight: 1.4,
-                }}>
-                  &ldquo;{quote}&rdquo;
-                </p>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 4 }}>
-                  {([["RARITY",rarity],["DRIP",drip],["ENERGY",energy],["AURA",aura]] as [string,number][]).map(([lbl,val]) => (
-                    <div key={lbl} style={{ textAlign: "center", padding: "4px 2px" }}>
-                      <p style={{ fontFamily: "var(--font-mundial)", fontSize: 8, color: "rgba(255,255,255,0.32)", margin: 0, letterSpacing: "0.1em", textTransform: "uppercase" }}>{lbl}</p>
-                      <p style={{
-                        fontFamily: "var(--font-brice)", fontSize: 27, fontWeight: 900,
-                        color: "#FFE048", margin: 0, lineHeight: 1.1,
-                        textShadow: val >= 80
-                          ? "0 0 18px rgba(255,224,72,1), 0 0 40px rgba(255,224,72,0.6)"
-                          : "0 0 12px rgba(255,224,72,0.4)",
-                      }}>{val}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <p style={{
-                  fontFamily: "var(--font-mundial)", fontSize: 9, color: "rgba(255,255,255,0.28)",
-                  margin: "6px 0 0", textAlign: "center", letterSpacing: "0.07em",
-                }}>
-                  RANK #{rank.toLocaleString()} OF 6,969
-                </p>
-              </div>
             </div>
-
-            {/* ── BACK ── */}
-            <div
-              className="card-face"
-              style={{
-                position: "absolute", inset: 0, borderRadius: 16,
-                overflow: "hidden", background: "#0a0a0a",
-                border: `2px solid ${TIER_BORDER[tier]}`,
-                boxShadow: TIER_GLOW[tier],
-                transform: "rotateY(180deg) translateZ(0.01px)",
-                animation: isLegendary ? "legendary-glow 2.4s ease-in-out infinite" : undefined,
-              }}
-            >
-              {/* Barely-there diamond texture — luxury dark */}
-              <div style={{
-                position: "absolute", inset: 0,
-                backgroundImage: [
-                  "repeating-linear-gradient( 45deg, rgba(255,224,72,0.022) 0px, rgba(255,224,72,0.022) 1px, transparent 1px, transparent 32px)",
-                  "repeating-linear-gradient(-45deg, rgba(255,224,72,0.022) 0px, rgba(255,224,72,0.022) 1px, transparent 1px, transparent 32px)",
-                ].join(","),
-              }} />
-              <div style={{ position: "absolute", inset: 7,  borderRadius: 10, border: "1px solid rgba(255,224,72,0.22)", pointerEvents: "none" }} />
-              <div style={{ position: "absolute", inset: 12, borderRadius:  6, border: "1px solid rgba(255,224,72,0.10)", pointerEvents: "none" }} />
-
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18 }}>
-                <div style={{ width: 96, height: 96, filter: "drop-shadow(0 0 28px rgba(255,224,72,0.6))" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/shaka.png" alt="Shaka" className="shaka-idle" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <p style={{
-                    fontFamily: "var(--font-brice)", fontSize: 32, fontWeight: 900,
-                    color: "#FFE048", margin: 0, textTransform: "uppercase",
-                    letterSpacing: "0.06em", textShadow: "0 0 34px rgba(255,224,72,0.65)",
-                  }}>THE VIBE CARD</p>
-                  <p style={{ fontFamily: "var(--font-mundial)", fontSize: 12, color: "rgba(255,255,255,0.34)", margin: "5px 0 0", letterSpacing: "0.16em", textTransform: "uppercase" }}>
-                    Good Vibes Club
-                  </p>
-                </div>
-                <div style={{
-                  padding: "5px 16px", borderRadius: 20,
-                  border: `1px solid ${TIER_BORDER[tier]}`,
-                  background: `${TIER_BORDER[tier]}14`,
-                }}>
-                  <p style={{ fontFamily: "var(--font-brice)", fontSize: 13, fontWeight: 900, color: TIER_BORDER[tier], margin: 0, letterSpacing: "0.1em" }}>
-                    GVC #{id} · {tier}
-                  </p>
-                </div>
-              </div>
-
-              {/* Corner marks */}
-              {[{top:15,left:15},{top:15,right:15},{bottom:15,left:15},{bottom:15,right:15}].map((pos,i) => {
-                const isTop = "top" in pos, isLeft = "left" in pos;
-                return (
-                  <div key={i} style={{
-                    position:"absolute", width:18, height:18, ...(pos as React.CSSProperties),
-                    borderTop:    isTop  ? "1.5px solid rgba(255,224,72,0.38)" : undefined,
-                    borderBottom: !isTop ? "1.5px solid rgba(255,224,72,0.38)" : undefined,
-                    borderLeft:   isLeft  ? "1.5px solid rgba(255,224,72,0.38)" : undefined,
-                    borderRight:  !isLeft ? "1.5px solid rgba(255,224,72,0.38)" : undefined,
-                  }} />
-                );
-              })}
-            </div>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/portrait/${card.tokenId}`}
+            alt={`GVC #${card.tokenId}`}
+            style={{
+              width: "100%", height: "100%",
+              objectFit: "cover", objectPosition: "center top",
+              display: imgState === "loaded" ? "block" : "none",
+            }}
+            onLoad={() => setImgState("loaded")}
+            onError={() => setImgState("error")}
+          />
+          {/* gradient fade */}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 30,
+            background: "linear-gradient(to top, #0a0a16, transparent)" }} />
+          {/* token id top */}
+          <div style={{ position: "absolute", top: 4, left: 6, fontSize: 8,
+            color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mundial)" }}>
+            #{card.tokenId}
           </div>
+        </div>
+
+        {/* Bottom panel */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+          height: "47%", padding: "4px 7px 6px", display: "flex", flexDirection: "column", gap: 2 }}>
+          <p style={{
+            fontFamily: "var(--font-brice)", fontSize: 8, fontWeight: 900,
+            color: tc.label, margin: "0 0 3px", textTransform: "uppercase",
+            letterSpacing: "0.04em", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden",
+          }}>
+            {card.archetype.replace("The ", "")}
+          </p>
+          {stats.map(([stat, val]) => {
+            const isHL = highlightStat === stat;
+            return (
+              <div key={stat} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: isHL ? "1px 4px" : "1px 2px",
+                borderRadius: 4,
+                background: isHL ? `${STAT_COLORS[stat]}22` : "transparent",
+                border: isHL ? `1px solid ${STAT_COLORS[stat]}55` : "1px solid transparent",
+              }}>
+                <span style={{
+                  fontSize: 8, fontFamily: "var(--font-mundial)",
+                  color: isHL ? STAT_COLORS[stat] : "rgba(255,255,255,0.45)",
+                  letterSpacing: "0.06em",
+                }}>{STAT_LABELS[stat]}</span>
+                <span style={{
+                  fontSize: isHL ? 11 : 9, fontFamily: "var(--font-brice)",
+                  fontWeight: 900,
+                  color: isHL ? STAT_COLORS[stat] : "rgba(255,255,255,0.75)",
+                  textShadow: isHL ? `0 0 8px ${STAT_COLORS[stat]}` : undefined,
+                }}>{val}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Gold pill interaction hint */}
-      <motion.div
-        animate={{
-          boxShadow: [
-            "0 0 8px rgba(255,224,72,0.25), inset 0 0 8px rgba(255,224,72,0.05)",
-            "0 0 20px rgba(255,224,72,0.65), inset 0 0 12px rgba(255,224,72,0.12)",
-            "0 0 8px rgba(255,224,72,0.25), inset 0 0 8px rgba(255,224,72,0.05)",
-          ],
-        }}
-        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          marginTop: 14,
-          display: "inline-flex", alignItems: "center", gap: 8,
-          padding: "7px 18px", borderRadius: 20,
-          background: "rgba(255,224,72,0.1)",
-          border: "1px solid rgba(255,224,72,0.45)",
-          color: "#FFE048",
-          fontFamily: "var(--font-mundial)", fontSize: 12, letterSpacing: "0.08em",
-        }}
-      >
-        <span style={{ fontSize: 10 }}>✦</span>
-        {flipped ? "Tap or drag to flip back" : "Drag to tilt · Tap to flip"}
-        <span style={{ fontSize: 10 }}>✦</span>
-      </motion.div>
+      {/* WIN / LOSE badge */}
+      {winner && (
+        <motion.div
+          initial={{ scale: 0, y: -10 }}
+          animate={{ scale: 1, y: 0 }}
+          style={{
+            position: "absolute", top: -10, right: -10, zIndex: 10,
+            background: C.mint, color: "#0f0f1e",
+            fontFamily: "var(--font-brice)", fontSize: 10, fontWeight: 900,
+            padding: "3px 8px", borderRadius: 8, letterSpacing: "0.05em",
+          }}
+        >WIN</motion.div>
+      )}
+      {loser && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          style={{
+            position: "absolute", top: -10, right: -10, zIndex: 10,
+            background: C.coral, color: "#0f0f1e",
+            fontFamily: "var(--font-brice)", fontSize: 10, fontWeight: 900,
+            padding: "3px 8px", borderRadius: 8, letterSpacing: "0.05em",
+          }}
+        >LOSE</motion.div>
+      )}
     </div>
   );
 }
 
-// ─── PACKET REVEAL ────────────────────────────────────────────────────────────
+// ─── PACK REVEAL ──────────────────────────────────────────────────────────────
 
 const PACK_W = 270;
 const PACK_H = 380;
@@ -686,7 +574,7 @@ const TAB_H  = 70;
 function PacketReveal({ onOpened }: { onOpened: () => void }) {
   const [phase,   setPhase]   = useState<"idle"|"tearing"|"exploding">("idle");
   const [cutPct,  setCutPct]  = useState(0);
-  const [shake,   setShake]   = useState(0); // increments to trigger shake key
+  const [shake,   setShake]   = useState(0);
   const live     = useRef({ cutPct: 0, phase: "idle" as "idle"|"tearing"|"exploding", down: false, startX: 0, startPct: 0 });
   const lastSnip = useRef(0);
   const called   = useRef(false);
@@ -698,7 +586,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
 
   useEffect(() => {
     if (cutPct >= 1 && phase === "tearing") {
-      sfx.tear();
       setPhase("exploding");
       if (!called.current) { called.current = true; setTimeout(onOpened, 800); }
     }
@@ -719,7 +606,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
       if (p > 0) { setPhase("tearing"); setCutPct(p); }
       const now = Date.now();
       if (now - lastSnip.current > 75 && p > 0.01 && p < 0.98) {
-        sfx.snip();
         setShake(s => s + 1);
         lastSnip.current = now;
       }
@@ -749,12 +635,9 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
   const goldV = "linear-gradient(180deg,#C8960A,#FFE048 40%,#FFD700 60%,#B8860B)";
   const goldH = "linear-gradient(90deg,transparent,#FFE048 20%,#FFD700 50%,#FFE048 80%,transparent)";
 
-  // Shared tab face — repeating shaka tile pattern
   const tabFace = (
     <>
-      {/* Colourful base */}
-      <div style={{ position:"absolute",inset:0, background:"linear-gradient(135deg,#2d0b5e,#1e0840,#3d2200,#1a0d00)" }} />
-      {/* Repeating shaka grid */}
+      <div style={{ position:"absolute",inset:0, background:"linear-gradient(135deg,#2d0b5e 0%,#1e0840 35%,#3d1a00 70%,#4a2200 100%)" }} />
       <div style={{
         position:"absolute", inset:0,
         backgroundImage:"url('/shaka.png')",
@@ -763,13 +646,11 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
         opacity:0.18,
         filter:"sepia(1) saturate(4) hue-rotate(3deg) brightness(1.4)",
       }} />
-      {/* Centre-to-edge gold fade so edges are brighter */}
       <div style={{
         position:"absolute",inset:0,
         background:"radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,224,72,0.12) 0%, rgba(0,0,0,0.35) 100%)",
         pointerEvents:"none",
       }} />
-      {/* Gold borders */}
       <div style={{ position:"absolute",top:0,left:0,right:0,height:2,background:goldH }} />
       <div style={{ position:"absolute",top:0,bottom:0,left:0,width:2,background:goldV }} />
       <div style={{ position:"absolute",top:0,bottom:0,right:0,width:2,background:goldV }} />
@@ -778,15 +659,12 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
 
   return (
     <>
-      {/* Pack shake wrapper */}
       <motion.div
         key={shake}
         animate={tearing ? { x: [0, -2, 3, -2, 1, 0] } : {}}
         transition={{ duration: 0.16, ease: "easeOut" }}
         style={{ position:"relative", width:PACK_W, height:PACK_H, userSelect:"none", touchAction:"none" }}
       >
-
-        {/* ── TAB: right (uncut) portion — static ── */}
         {!exploding && (
           <div style={{
             position:"absolute", top:0, left:0, width:PACK_W, height:TAB_H,
@@ -799,7 +677,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
           </div>
         )}
 
-        {/* ── TAB: left (peeling) portion ── */}
         {cutX > 0 && (
           <motion.div
             animate={exploding
@@ -817,7 +694,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
           </motion.div>
         )}
 
-        {/* ── Rip particles at tear front ── */}
         {tearing && cutX > 4 && cutX < PACK_W - 4 && Array.from({length:5}, (_,i) => (
           <motion.div key={i} style={{
             position:"absolute", left: cutX, top: TAB_H - 6 + (i%3)*4,
@@ -830,17 +706,14 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
           />
         ))}
 
-        {/* ── Dotted tear line — overlaid at the seam, hidden once exploding ── */}
         {!exploding && <div style={{
           position:"absolute", top: TAB_H - 1, left:0, right:0, height:12,
           zIndex:5, pointerEvents:"none",
         }}>
-          {/* Dotted line */}
           <div style={{
             position:"absolute", top:5, left:0, right:0, height:1,
             background:"repeating-linear-gradient(90deg,rgba(255,224,72,0.5) 0,rgba(255,224,72,0.5) 5px,transparent 5px,transparent 10px)",
           }} />
-          {/* Label centred on the line */}
           <div style={{
             position:"absolute", top:-1, left:"50%", transform:"translateX(-50%)",
             background:"linear-gradient(90deg,#1e1e1e,#282828,#1e1e1e)", padding:"1px 8px", borderRadius:2,
@@ -852,7 +725,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
           </div>
         </div>}
 
-        {/* ── Pack body — full height, tab overlaps top ── */}
         <motion.div
           animate={exploding ? { y: 320, opacity: 0, scale: 0.55 } : {}}
           transition={exploding ? { duration: 0.55, ease:[0.4,0,1,1], delay: 0.05 } : {}}
@@ -860,7 +732,7 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
             position:"absolute", top: TAB_H, left:0,
             width:PACK_W, height: PACK_H - TAB_H,
             borderRadius:"0 0 12px 12px", overflow:"hidden",
-            background:"linear-gradient(155deg,#1e0840 0%,#2d0b5e 20%,#1a0535 42%,#2a1400 65%,#3d2200 82%,#1a1000 100%)",
+            background:"linear-gradient(155deg,#2d0b5e 0%,#1e0840 35%,#3d1a00 70%,#4a2200 100%)",
           }}
         >
           <div style={{ position:"absolute",top:0,bottom:0,left:0,width:3,background:goldV,zIndex:3 }} />
@@ -892,7 +764,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
         </motion.div>
       </motion.div>
 
-      {/* Hint */}
       {phase === "idle" && (
         <motion.p
           initial={{ opacity: 0 }}
@@ -908,584 +779,1358 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
   );
 }
 
-// ─── SMALL AMBIENT EMBERS ─────────────────────────────────────────────────────
+// ─── SCREEN 1: HOME ───────────────────────────────────────────────────────────
 
-const EMBER_DEFS = [
-  { left:"5%",  delay:"0s",   dur:"8s",  size:3, cls:"ember"           },
-  { left:"14%", delay:"1.4s", dur:"10s", size:4, cls:"ember ember-lg"  },
-  { left:"24%", delay:"0.6s", dur:"7s",  size:3, cls:"ember"           },
-  { left:"36%", delay:"2.1s", dur:"9s",  size:3, cls:"ember"           },
-  { left:"50%", delay:"0.3s", dur:"6s",  size:5, cls:"ember ember-orb" },
-  { left:"62%", delay:"1.7s", dur:"11s", size:3, cls:"ember"           },
-  { left:"72%", delay:"0.9s", dur:"8s",  size:4, cls:"ember ember-lg"  },
-  { left:"82%", delay:"2.5s", dur:"7s",  size:3, cls:"ember"           },
-  { left:"91%", delay:"0.1s", dur:"9s",  size:3, cls:"ember"           },
-  { left:"30%", delay:"3.0s", dur:"8s",  size:3, cls:"ember ember-twinkle" },
-  { left:"68%", delay:"2.8s", dur:"7s",  size:3, cls:"ember ember-twinkle" },
-];
-
-function AmbientEmbers() {
+function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: () => void }) {
   return (
-    <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:0, overflow:"hidden" }}>
-      {EMBER_DEFS.map((p, i) => (
-        <div
-          key={i}
-          className={p.cls}
+    <div className="vb-bg" style={{ minHeight: "100vh", position: "relative", overflow: "hidden" }}>
+      <FloatingCards />
+      <div style={{
+        position: "relative", zIndex: 1,
+        minHeight: "100vh",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "40px 20px",
+        textAlign: "center",
+      }}>
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/shaka.png"
+            alt="Shaka"
+            width={80}
+            height={80}
+            className="shaka-idle"
+            style={{ filter: "drop-shadow(0 0 20px rgba(255,224,72,0.8))" }}
+          />
+        </motion.div>
+
+        <motion.h1
+          className="shimmer-title"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.08 }}
           style={{
-            position:"absolute", left:p.left,
-            bottom:`${(i % 5) * 7}%`,
-            animationDelay:p.delay, animationDuration:p.dur,
-            width:p.size, height:p.size,
+            fontFamily: "var(--font-brice)",
+            fontSize: "clamp(52px, 12vw, 96px)",
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+            margin: "12px 0 6px",
           }}
-        />
-      ))}
+        >
+          VIBE BATTLE
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.14 }}
+          style={{
+            color: "rgba(255,255,255,0.6)",
+            fontSize: 16,
+            fontFamily: "var(--font-mundial)",
+            letterSpacing: "0.06em",
+            margin: 0,
+          }}
+        >
+          Your GVC. Your Stats. Your Glory.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.22 }}
+          style={{ marginTop: 40, display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}
+        >
+          <motion.button
+            onClick={() => { sfxClick(); onPackRip(); }}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.04 }}
+            style={{
+              background: "linear-gradient(135deg, #ff6b8a, #ffb347)",
+              color: "#0f0f1e",
+              fontFamily: "var(--font-brice)",
+              fontSize: 20, fontWeight: 900,
+              padding: "16px 32px", borderRadius: 16,
+              border: "none", letterSpacing: "0.04em",
+              boxShadow: "0 8px 32px rgba(255,107,138,0.45)",
+              cursor: "pointer",
+            }}
+          >
+            🎴 RIP A PACK
+          </motion.button>
+
+          <motion.button
+            onClick={() => { sfxClick(); onBattle(); }}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.04 }}
+            style={{
+              background: "linear-gradient(135deg, #c084fc, #74d7f7)",
+              color: "#0f0f1e",
+              fontFamily: "var(--font-brice)",
+              fontSize: 20, fontWeight: 900,
+              padding: "16px 32px", borderRadius: 16,
+              border: "none", letterSpacing: "0.04em",
+              boxShadow: "0 8px 32px rgba(192,132,252,0.45)",
+              cursor: "pointer",
+            }}
+          >
+            ⚔️ BATTLE
+          </motion.button>
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          style={{ marginTop: 48, fontSize: 12, color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-mundial)" }}
+        >
+          Built by @imaesr for the GVC Vibeathon 🤙
+        </motion.p>
+      </div>
     </div>
   );
 }
 
-// ─── PAGE ─────────────────────────────────────────────────────────────────────
+// ─── SCREEN 2: PACK RIP ───────────────────────────────────────────────────────
 
-export default function Page() {
-  const [input,        setInput]        = useState("");
-  const [tokenId,      setTokenId]      = useState<number | null>(null);
-  const [cardData,     setCardData]     = useState<CardData | null>(null);
-  const [generating,   setGenerating]   = useState(false);
-  const [showBurst,    setShowBurst]    = useState(false);
+function PackRipScreen({
+  onBattle,
+  onRipAgain,
+  onHome,
+}: {
+  onBattle: (card: BattleCard) => void;
+  onRipAgain: () => void;
+  onHome: () => void;
+}) {
+  const [tokenInput,   setTokenInput]   = useState("");
+  const [previewCard,  setPreviewCard]  = useState<BattleCard | null>(null);
   const [packRevealed, setPackRevealed] = useState(false);
-  const [nftColors,    setNftColors]    = useState<string[]>([]);
-  const frontRef = useRef<HTMLDivElement>(null!);
+  const [showBurst,    setShowBurst]    = useState(false);
 
-  const generateById = useCallback((id: number) => {
-    sfx.generate();
-    setGenerating(true);
-    setShowBurst(false);
+  const generateCard = useCallback((id: number) => {
+    setPreviewCard(generateBattleCard(id));
     setPackRevealed(false);
-    setNftColors([]);
-    setTimeout(() => {
-      setTokenId(id);
-      setCardData(generateCardData(id));
-      setGenerating(false);
-    }, 320);
+    setShowBurst(false);
   }, []);
 
-  const generate = useCallback(() => {
-    const id = parseInt(input.trim(), 10);
+  const onGenerate = () => {
+    const id = parseInt(tokenInput.trim(), 10);
     if (isNaN(id) || id < 0 || id > 6968) return;
-    generateById(id);
-  }, [input, generateById]);
+    sfxClick();
+    generateCard(id);
+  };
 
-  const onSelectToken = useCallback((id: number) => {
-    setInput(String(id));
-    generateById(id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [generateById]);
+  const onRandom = () => {
+    sfxClick();
+    const card = randomCard();
+    setTokenInput(String(card.tokenId));
+    setPreviewCard(card);
+    setPackRevealed(false);
+    setShowBurst(false);
+  };
 
-  const onPacketOpened = useCallback(() => {
-    sfx.reveal();
+  const onPackOpened = useCallback(() => {
     setPackRevealed(true);
     setShowBurst(true);
     setTimeout(() => setShowBurst(false), 2000);
   }, []);
 
-  const onKey = (e: React.KeyboardEvent) => { if (e.key === "Enter") generate(); };
-
-  const shareToX = useCallback(() => {
-    if (!cardData || tokenId === null) return;
-    const text = [
-      `GVC #${tokenId} — ${cardData.archetype}`,
-      "",
-      `${cardData.tier} tier · Rank #${cardData.rank}`,
-      `Rarity ${cardData.rarity} · Drip ${cardData.drip} · Energy ${cardData.energy} · Aura ${cardData.aura}`,
-      "",
-      `Generate yours → The Vibe Card by @imaesr`,
-      `goodvibesclub.ai`,
-      "",
-      `#GoodVibesClub #GVC #VibeCard`,
-    ].join("\n");
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank");
-  }, [cardData, tokenId]);
-
-  const downloadCard = useCallback(async () => {
-    if (tokenId === null || !cardData) return;
-    try {
-      await document.fonts.ready;
-
-      const S = 2;
-      const W = DESIGN_W, H = DESIGN_H;
-      const cv = document.createElement("canvas");
-      cv.width = W * S; cv.height = H * S;
-      const ctx = cv.getContext("2d")!;
-      ctx.scale(S, S);
-
-      // Resolve CSS-variable font names (Next.js hashes them)
-      const cs = getComputedStyle(document.documentElement);
-      const brice   = cs.getPropertyValue("--font-brice").trim()   || "serif";
-      const mundial = cs.getPropertyValue("--font-mundial").trim() || "sans-serif";
-
-      const loadImg = (src: string) => new Promise<HTMLImageElement>(resolve => {
-        const img = new Image(); img.crossOrigin = "anonymous";
-        img.onload = () => resolve(img); img.onerror = () => resolve(img);
-        img.src = src;
-      });
-
-      const rr = (x: number, y: number, w: number, h: number, r: number) => {
-        ctx.beginPath();
-        ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
-        ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
-        ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
-        ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
-      };
-
-      // ── Clip to card shape ─────────────────────────────────────────
-      ctx.save(); rr(0,0,W,H,16); ctx.clip();
-
-      // Background
-      ctx.fillStyle = "#050505"; ctx.fillRect(0,0,W,H);
-
-      // Portrait
-      const portrait = await loadImg(`/api/portrait/${tokenId}`);
-      if (portrait.naturalWidth > 0) {
-        const iw = portrait.naturalWidth, ih = portrait.naturalHeight;
-        const sc = Math.max(W/iw, H/ih);
-        ctx.drawImage(portrait, (W - iw*sc)/2, 0, iw*sc, ih*sc);
-      }
-
-      // Bottom fade
-      const fade = ctx.createLinearGradient(0, H*0.4, 0, H);
-      fade.addColorStop(0, "rgba(5,5,5,0)");
-      fade.addColorStop(0.34, "rgba(5,5,5,0.34)");
-      fade.addColorStop(0.66, "rgba(5,5,5,0.86)");
-      fade.addColorStop(1,   "rgba(5,5,5,0.98)");
-      ctx.fillStyle = fade; ctx.fillRect(0, H*0.4, W, H*0.6);
-
-      // Top fade
-      const topFade = ctx.createLinearGradient(0,0,0,50);
-      topFade.addColorStop(0, "rgba(5,5,5,0.92)");
-      topFade.addColorStop(1, "rgba(5,5,5,0)");
-      ctx.fillStyle = topFade; ctx.fillRect(0,0,W,50);
-
-      // GVC #id label
-      ctx.font = `11px ${mundial}`; ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.textBaseline = "middle"; ctx.textAlign = "left";
-      ctx.fillText(`GVC #${tokenId}`, 12, 21);
-
-      // Tier badge pill
-      const tc = TIER_LABEL_COLOR[cardData.tier];
-      const tt = cardData.tier.toUpperCase();
-      ctx.font = `900 10px ${brice}`;
-      const tw = ctx.measureText(tt).width;
-      const bpx = W - tw - 28, bpy = 10, bpw = tw + 16, bph = 18;
-      rr(bpx,bpy,bpw,bph,4);
-      ctx.fillStyle = tc + "28"; ctx.fill();
-      ctx.strokeStyle = tc; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = tc; ctx.textBaseline = "middle";
-      ctx.fillText(tt, bpx+8, bpy+9);
-
-      // ── Bottom content positions (match live card layout) ─────────────
-      const PAD       = 16;
-      const BADGE_SZ  = 36;
-      const BADGE_TOP = H - 180;           // matches card's bottom padding + content stack
-      const ARCH_Y    = BADGE_TOP + BADGE_SZ + 11 + 20;  // badge + gap + font ascent
-      const QUOTE_Y   = ARCH_Y + 20;
-      const STATS_Y   = QUOTE_Y + 18;
-      const STAT_H    = 40;
-      const RANK_Y    = H - 20;
-
-      // Badges — no border; draw image clipped to rounded rect
-      await Promise.allSettled(cardData.badges.map(async (b, i) => {
-        const bx = PAD + i * (BADGE_SZ + 6), by = BADGE_TOP;
-        const bimg = await loadImg(`https://goodvibesclub.ai/badges/${b}.webp`);
-        if (bimg.naturalWidth > 0) {
-          ctx.save(); rr(bx,by,BADGE_SZ,BADGE_SZ,8); ctx.clip();
-          ctx.drawImage(bimg,bx,by,BADGE_SZ,BADGE_SZ); ctx.restore();
-        } else {
-          // Subtle fallback placeholder — no visible border
-          rr(bx,by,BADGE_SZ,BADGE_SZ,8);
-          ctx.fillStyle = "rgba(255,255,255,0.04)"; ctx.fill();
-        }
-      }));
-
-      // Archetype
-      ctx.font = `900 21px ${brice}`; ctx.fillStyle = "#FFE048";
-      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-      ctx.shadowColor = "rgba(255,224,72,0.65)"; ctx.shadowBlur = 26;
-      ctx.fillText(cardData.archetype.toUpperCase(), PAD, ARCH_Y);
-      ctx.shadowBlur = 0;
-
-      // Quote
-      ctx.font = `italic 11px ${mundial}`;
-      ctx.fillStyle = "rgba(255,255,255,0.48)";
-      ctx.fillText(`"${cardData.quote}"`, PAD, QUOTE_Y);
-
-      // Stats grid
-      const statCols = 4;
-      const gap = 6;
-      const statW = (W - PAD*2 - gap*(statCols-1)) / statCols;
-      const stats: [string, number][] = [
-        ["RARITY", cardData.rarity], ["DRIP", cardData.drip],
-        ["ENERGY", cardData.energy], ["AURA", cardData.aura],
-      ];
-      stats.forEach(([lbl, val], i) => {
-        const sx = PAD + i*(statW+gap);
-        rr(sx,STATS_Y,statW,STAT_H,8);
-        ctx.fillStyle = "rgba(5,5,5,0.75)"; ctx.fill();
-        ctx.strokeStyle = "rgba(255,224,72,0.16)"; ctx.lineWidth = 1; ctx.stroke();
-        ctx.font = `8.5px ${mundial}`; ctx.fillStyle = "rgba(255,255,255,0.38)";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(lbl, sx+statW/2, STATS_Y+11);
-        ctx.font = `900 22px ${brice}`; ctx.fillStyle = "#FFE048";
-        if (val >= 80) { ctx.shadowColor = "rgba(255,224,72,0.9)"; ctx.shadowBlur = 14; }
-        ctx.fillText(String(val), sx+statW/2, STATS_Y+28);
-        ctx.shadowBlur = 0;
-      });
-
-      // Rank
-      ctx.font = `9px ${mundial}`; ctx.fillStyle = "rgba(255,255,255,0.28)";
-      ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-      ctx.fillText(`RANK #${cardData.rank.toLocaleString()} OF 6,969`, W/2, RANK_Y);
-
-      ctx.restore(); // pop card clip
-
-      // Border
-      rr(1,1,W-2,H-2,16);
-      ctx.strokeStyle = TIER_BORDER[cardData.tier]; ctx.lineWidth = 2; ctx.stroke();
-
-      const a = document.createElement("a");
-      a.download = `vibe-card-${tokenId}.png`;
-      a.href = cv.toDataURL("image/png");
-      a.click();
-    } catch (err) { console.error("Download failed:", err); }
-  }, [tokenId, cardData]);
-
   return (
-    <>
-      <Watermark />
-      <BackgroundOrbs />
-      <AmbientEmbers />
-
-      <main style={{
-        minHeight: "100vh", position: "relative", zIndex: 1,
-        display: "flex", flexDirection: "column", alignItems: "center",
-        padding: "24px 20px 64px",
-        overflowX: "hidden",
-        width: "100%",
-        boxSizing: "border-box",
-      }}>
-        {/* ── Header ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{ textAlign: "center", marginBottom: 28 }}
+    <div style={{
+      minHeight: "100vh", position: "relative", overflow: "hidden",
+      background: "rgba(15,15,30,0.97)",
+    }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 64px", maxWidth: 520, margin: "0 auto" }}>
+        {/* Back */}
+        <motion.button
+          onClick={() => { sfxClick(); onHome(); }}
+          whileTap={{ scale: 0.93 }}
+          style={{
+            background: "transparent", border: "1px solid rgba(255,255,255,0.15)",
+            color: "rgba(255,255,255,0.5)", padding: "8px 16px", borderRadius: 10,
+            fontFamily: "var(--font-mundial)", fontSize: 13, cursor: "pointer",
+            marginBottom: 24,
+          }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 44, height: 44 }} />
-            <h1 className="text-shimmer" style={{
-              fontFamily: "var(--font-brice)",
-              fontSize: "clamp(36px, 8.5vw, 62px)",
-              fontWeight: 900, margin: 0,
-              textTransform: "uppercase", letterSpacing: "0.05em",
-              textShadow: "0 0 60px rgba(255,224,72,0.55), 0 0 120px rgba(255,224,72,0.2)",
-            }}>
-              THE VIBE CARD
-            </h1>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 44, height: 44 }} />
-          </div>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>
-            GVC Collectible Card Generator
-          </p>
-        </motion.div>
+          ← HOME
+        </motion.button>
 
-        {/* ── Input ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
+        <motion.h2
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          style={{ display: "flex", gap: 8, marginBottom: 12, width: "100%", maxWidth: 400 }}
+          style={{
+            fontFamily: "var(--font-brice)", fontSize: 36, fontWeight: 900,
+            background: "linear-gradient(135deg, #ff6b8a, #ffb347)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+            margin: "0 0 24px", textTransform: "uppercase", letterSpacing: "0.04em",
+          }}
         >
+          RIP A PACK 🎴
+        </motion.h2>
+
+        {/* Input row */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 32, flexWrap: "wrap" }}>
           <input
             type="number" min="0" max="6968"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={onKey}
-            placeholder="Token ID  (0 – 6968)"
+            value={tokenInput}
+            onChange={e => setTokenInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") onGenerate(); }}
+            placeholder="Token ID (0–6968)"
             style={{
-              flex: 1, padding: "13px 16px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,224,72,0.22)",
+              flex: 1, minWidth: 120,
+              padding: "12px 14px",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: 10, color: "#fff",
-              fontFamily: "var(--font-mundial)", fontSize: 15,
-              outline: "none", transition: "border-color 0.2s, box-shadow 0.2s",
-            }}
-            onFocus={e => {
-              (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,224,72,0.6)";
-              (e.currentTarget as HTMLInputElement).style.boxShadow   = "0 0 0 2px rgba(255,224,72,0.1)";
-            }}
-            onBlur={e => {
-              (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,224,72,0.22)";
-              (e.currentTarget as HTMLInputElement).style.boxShadow   = "none";
+              fontFamily: "var(--font-mundial)", fontSize: 14,
+              outline: "none",
             }}
           />
           <motion.button
-            onClick={generate}
-            disabled={generating}
-            animate={generating
-              ? { scale: [1, 1.04, 1], boxShadow: ["0 0 12px rgba(255,224,72,0.4)","0 0 28px rgba(255,224,72,0.8)","0 0 12px rgba(255,224,72,0.4)"] }
-              : { boxShadow: "0 0 0px rgba(255,224,72,0)" }}
-            transition={{ duration: 0.75, repeat: generating ? Infinity : 0, ease: "easeInOut" }}
-            whileTap={!generating ? { scale: 0.95 } : {}}
+            onClick={onGenerate}
+            whileTap={{ scale: 0.93 }}
             style={{
-              padding: "13px 24px", background: "#FFE048", color: "#080808",
+              padding: "12px 20px", background: C.lavender, color: "#0f0f1e",
               border: "none", borderRadius: 10,
-              fontFamily: "var(--font-brice)", fontSize: 15, fontWeight: 900,
-              textTransform: "uppercase", letterSpacing: "0.05em",
-              cursor: generating ? "default" : "pointer",
-              opacity: generating ? 0.85 : 1, whiteSpace: "nowrap",
+              fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
+              cursor: "pointer",
             }}
           >
-            {generating ? "…" : "Generate"}
+            Generate
           </motion.button>
-        </motion.div>
+          <motion.button
+            onClick={onRandom}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              padding: "12px 16px", background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              color: "#fff", borderRadius: 10,
+              fontFamily: "var(--font-mundial)", fontSize: 14, cursor: "pointer",
+            }}
+          >
+            🎲 Random
+          </motion.button>
+        </div>
 
-        {/* ── Wallet (inline, below input) ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          style={{ marginBottom: 24, width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", alignItems: "center" }}
-        >
-          <WalletConnect onSelectToken={onSelectToken} />
-        </motion.div>
-
-        {/* ── Card area ── */}
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
-          {/* Focused glow behind card — no filter:blur to avoid dark compositing halo */}
-          <div style={{
-            position: "absolute", top: "50%", left: "50%",
-            transform: "translate(-50%,-50%)",
-            width: 1000, height: 1000, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(255,224,72,0.10) 0%, rgba(255,95,31,0.04) 28%, rgba(255,224,72,0.02) 48%, transparent 65%)",
-            pointerEvents: "none", zIndex: 0,
-          }} />
-
+        {/* Pack / Card area */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           <AnimatePresence mode="wait">
-
-            {/* ── Packet (shown before card is revealed) ── */}
-            {cardData && tokenId !== null && !packRevealed && (
+            {previewCard && !packRevealed && (
               <motion.div
-                key={`pack-${tokenId}`}
+                key={`pack-${previewCard.tokenId}`}
                 initial={{ opacity: 0, scale: 0.88, y: 24 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.7, y: -30 }}
                 transition={{ type: "spring", stiffness: 240, damping: 24 }}
-                style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center" }}
               >
-                <PacketReveal onOpened={onPacketOpened} />
+                <PacketReveal onOpened={onPackOpened} />
               </motion.div>
             )}
 
-            {/* ── Card (shown after packet torn open) ── */}
-            {cardData && tokenId !== null && packRevealed && (
+            {previewCard && packRevealed && (
               <motion.div
-                key={`card-${tokenId}`}
+                key={`card-${previewCard.tokenId}`}
                 initial={{ opacity: 0, scale: 0.82, y: 32 }}
-                animate={{ opacity: 1, scale: 1,    y: 0  }}
-                exit={  { opacity: 0, scale: 0.82,  y: -20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.82, y: -20 }}
                 transition={{ type: "spring", stiffness: 220, damping: 22 }}
-                style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24 }}
               >
-                {/* Burst particles */}
-                {showBurst && <TierBurst key={`burst-${tokenId}`} tier={cardData.tier} id={tokenId} nftColors={nftColors} />}
+                <div style={{ position: "relative" }}>
+                  {showBurst && (
+                    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible", zIndex: 20 }}>
+                      {Array.from({ length: 20 }, (_, i) => {
+                        const angle = (i / 20) * 360;
+                        const dist = 120 + Math.random() * 80;
+                        const rad = angle * Math.PI / 180;
+                        return (
+                          <motion.div
+                            key={i}
+                            style={{
+                              position: "absolute", left: "50%", top: "50%",
+                              width: 6, height: 6, borderRadius: "50%", marginLeft: -3, marginTop: -3,
+                              background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+                            }}
+                            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                            animate={{ x: Math.cos(rad) * dist, y: Math.sin(rad) * dist, opacity: 0, scale: 0 }}
+                            transition={{ duration: 1 + Math.random() * 0.5, ease: [0.23, 1, 0.32, 1] }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                  <BattleCardFull card={previewCard} />
+                </div>
 
-                <VibeCard id={tokenId} data={cardData} frontRef={frontRef} onNftColors={setNftColors} />
+                <div style={{
+                  padding: "16px", borderRadius: 14,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  textAlign: "center",
+                }}>
+                  <p style={{
+                    fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
+                    color: TIER_COLORS[previewCard.tier].label, margin: "0 0 4px",
+                    textTransform: "uppercase",
+                  }}>
+                    {previewCard.tier} — {previewCard.archetype}
+                  </p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0, fontFamily: "var(--font-mundial)" }}>
+                    RARITY {previewCard.rarity} · DRIP {previewCard.drip} · ENERGY {previewCard.energy} · AURA {previewCard.aura} · TOTAL {previewCard.total}
+                  </p>
+                </div>
 
-                {/* Action buttons */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.28 }}
-                  style={{
-                    display: "flex", gap: 8, marginTop: 16,
-                    width: "100%", maxWidth: 400,
-                  }}
-                >
-                  <button
-                    onClick={shareToX}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                  <motion.button
+                    onClick={() => { sfxClick(); onBattle(previewCard); }}
+                    whileTap={{ scale: 0.93 }}
                     style={{
-                      flex: 1, padding: "12px 14px", background: "#000", color: "#fff",
-                      border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10,
-                      fontFamily: "var(--font-mundial)", fontSize: 14,
-                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                      transition: "border-color 0.18s",
-                    }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.4)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.18)"}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                    </svg>
-                    Share to X
-                  </button>
-                  <button
-                    onClick={downloadCard}
-                    style={{
-                      flex: 1, padding: "12px 14px", background: "rgba(255,224,72,0.08)", color: "#FFE048",
-                      border: "1px solid rgba(255,224,72,0.28)", borderRadius: 10,
-                      fontFamily: "var(--font-mundial)", fontSize: 14,
-                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                      transition: "background 0.18s, border-color 0.18s",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.background  = "rgba(255,224,72,0.14)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,224,72,0.5)";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background  = "rgba(255,224,72,0.08)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,224,72,0.28)";
+                      padding: "14px 28px", background: "linear-gradient(135deg, #c084fc, #74d7f7)",
+                      color: "#0f0f1e", border: "none", borderRadius: 14,
+                      fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+                      cursor: "pointer", letterSpacing: "0.04em",
                     }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFE048" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Download PNG
-                  </button>
-                </motion.div>
+                    ⚔️ Battle with this card
+                  </motion.button>
+                  <motion.button
+                    onClick={() => { sfxClick(); onRipAgain(); setPreviewCard(null); setTokenInput(""); setPackRevealed(false); }}
+                    whileTap={{ scale: 0.93 }}
+                    style={{
+                      padding: "14px 28px",
+                      background: "transparent",
+                      border: `2px solid ${C.coral}`,
+                      color: C.coral, borderRadius: 14,
+                      fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+                      cursor: "pointer", letterSpacing: "0.04em",
+                    }}
+                  >
+                    🎴 Rip another
+                  </motion.button>
+                </div>
               </motion.div>
+            )}
+
+            {!previewCard && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)", textAlign: "center" }}
+              >
+                Enter a token ID or click Random to rip a pack
+              </motion.p>
             )}
           </AnimatePresence>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* ── Empty state ── */}
-        {!cardData && !generating && (
+// ─── SCREEN 3: BATTLE SETUP ───────────────────────────────────────────────────
+
+function BattleSetupScreen({
+  initialCard,
+  onStart,
+  onHome,
+}: {
+  initialCard?: BattleCard;
+  onStart: (p1: BattleCard[], p2: BattleCard[], mode: BattleMode) => void;
+  onHome: () => void;
+}) {
+  const [p1Slots, setP1Slots] = useState<(BattleCard | null)[]>(() => {
+    const arr: (BattleCard | null)[] = Array(5).fill(null);
+    if (initialCard) arr[0] = initialCard;
+    return arr;
+  });
+  const [p2Slots, setP2Slots] = useState<(BattleCard | null)[]>(Array(5).fill(null));
+  const [mode, setMode] = useState<BattleMode>("VS_CPU");
+  const [activeSlot, setActiveSlot] = useState<{ player: 1 | 2; idx: number } | null>(null);
+  const [slotInput, setSlotInput] = useState("");
+
+  const p1Complete = p1Slots.every(c => c !== null);
+  const p2Complete = p2Slots.every(c => c !== null);
+  const canStart = p1Complete && (mode === "VS_CPU" || p2Complete);
+
+  const fillSlot = (player: 1 | 2, idx: number, card: BattleCard) => {
+    if (player === 1) {
+      setP1Slots(prev => { const n = [...prev]; n[idx] = card; return n; });
+    } else {
+      setP2Slots(prev => { const n = [...prev]; n[idx] = card; return n; });
+    }
+    setActiveSlot(null);
+    setSlotInput("");
+  };
+
+  const removeSlot = (player: 1 | 2, idx: number) => {
+    if (player === 1) setP1Slots(prev => { const n = [...prev]; n[idx] = null; return n; });
+    else setP2Slots(prev => { const n = [...prev]; n[idx] = null; return n; });
+    setActiveSlot(null);
+  };
+
+  const handleAddCard = () => {
+    if (!activeSlot) return;
+    const id = parseInt(slotInput.trim(), 10);
+    if (isNaN(id) || id < 0 || id > 6968) return;
+    sfxCardPlay();
+    fillSlot(activeSlot.player, activeSlot.idx, generateBattleCard(id));
+  };
+
+  const handleRandom = () => {
+    if (!activeSlot) return;
+    sfxCardPlay();
+    fillSlot(activeSlot.player, activeSlot.idx, randomCard());
+  };
+
+  // WalletConnect onSelectToken fills next empty P1 slot
+  const onSelectToken = useCallback((id: number) => {
+    setP1Slots(prev => {
+      const n = [...prev];
+      const emptyIdx = n.findIndex(c => c === null);
+      if (emptyIdx !== -1) { n[emptyIdx] = generateBattleCard(id); sfxCardPlay(); }
+      return n;
+    });
+  }, []);
+
+  const handleStart = () => {
+    if (!canStart) return;
+    sfxClick();
+    const p1 = p1Slots.filter(Boolean) as BattleCard[];
+    const p2 = mode === "VS_CPU" ? generateCpuDeck() : (p2Slots.filter(Boolean) as BattleCard[]);
+    onStart(p1, p2, mode);
+  };
+
+  const renderSlots = (player: 1 | 2, slots: (BattleCard | null)[]) => (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      {slots.map((card, idx) => {
+        const isActive = activeSlot?.player === player && activeSlot?.idx === idx;
+        if (card) {
+          return (
+            <div key={idx} style={{ position: "relative" }}>
+              <BattleCardMini
+                card={card}
+                selected={isActive}
+                onSelect={() => { sfxClick(); setActiveSlot({ player, idx }); setSlotInput(""); }}
+              />
+            </div>
+          );
+        }
+        return (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { delay: 0.3 } }}
-            style={{ textAlign: "center", marginTop: 8 }}
+            key={idx}
+            onClick={() => { sfxClick(); setActiveSlot({ player, idx }); setSlotInput(""); }}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              width: 64, height: 88, borderRadius: 10, flexShrink: 0,
+              border: isActive
+                ? `2px solid ${C.sunshine}`
+                : "2px dashed rgba(255,255,255,0.2)",
+              background: isActive ? "rgba(255,224,72,0.06)" : "rgba(255,255,255,0.03)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 22,
+            }}
           >
-            <p style={{ color: "rgba(255,255,255,0.24)", fontSize: 13, margin: 0 }}>
-              Enter a GVC token ID to generate your Vibe Card
-            </p>
-            <p style={{ color: "rgba(255,255,255,0.13)", fontSize: 12, marginTop: 5 }}>
-              Try #142, #420, #1337, or any ID from 0–6968
-            </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 22, flexWrap: "wrap" }}>
-              {([
-                { id: 142,  fg: "#C084FC", bg: "rgba(192,132,252,0.1)",  border: "rgba(192,132,252,0.35)" },
-                { id: 420,  fg: "#F472B6", bg: "rgba(244,114,182,0.1)",  border: "rgba(244,114,182,0.35)" },
-                { id: 1337, fg: "#22D3EE", bg: "rgba(34,211,238,0.1)",   border: "rgba(34,211,238,0.35)"  },
-                { id: 6968, fg: "#FFE048", bg: "rgba(255,224,72,0.1)",   border: "rgba(255,224,72,0.35)"  },
-              ]).map(({ id: preview, fg, bg, border }) => (
+            +
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", position: "relative", overflow: "hidden", background: "rgba(15,15,30,0.98)" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 80px", maxWidth: 600, margin: "0 auto" }}>
+        {/* Back */}
+        <motion.button
+          onClick={() => { sfxClick(); onHome(); }}
+          whileTap={{ scale: 0.93 }}
+          style={{
+            background: "transparent", border: "1px solid rgba(255,255,255,0.15)",
+            color: "rgba(255,255,255,0.5)", padding: "8px 16px", borderRadius: 10,
+            fontFamily: "var(--font-mundial)", fontSize: 13, cursor: "pointer", marginBottom: 24,
+          }}
+        >
+          ← HOME
+        </motion.button>
+
+        <motion.h2
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            fontFamily: "var(--font-brice)", fontSize: 30, fontWeight: 900,
+            color: C.sunshine, margin: "0 0 24px",
+            textTransform: "uppercase", letterSpacing: "0.04em",
+          }}
+        >
+          BUILD YOUR DECK ⚔️
+        </motion.h2>
+
+        {/* Mode toggle */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+          {(["VS_CPU", "PASS_AND_PLAY"] as BattleMode[]).map(m => (
+            <motion.button
+              key={m}
+              onClick={() => { sfxClick(); setMode(m); }}
+              whileTap={{ scale: 0.93 }}
+              style={{
+                padding: "10px 20px", borderRadius: 20,
+                border: mode === m ? "none" : `1px solid rgba(255,255,255,0.2)`,
+                background: mode === m
+                  ? "linear-gradient(135deg, #c084fc, #74d7f7)"
+                  : "transparent",
+                color: mode === m ? "#0f0f1e" : "rgba(255,255,255,0.5)",
+                fontFamily: "var(--font-brice)", fontSize: 13, fontWeight: 900,
+                cursor: "pointer", letterSpacing: "0.04em",
+              }}
+            >
+              {m === "VS_CPU" ? "VS CPU 🤖" : "PASS & PLAY 👥"}
+            </motion.button>
+          ))}
+        </div>
+
+        {/* P1 Deck */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
+            color: C.sky, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            YOUR DECK ({p1Slots.filter(Boolean).length}/5)
+          </p>
+          {renderSlots(1, p1Slots)}
+        </div>
+
+        {/* Active slot input */}
+        <AnimatePresence>
+          {activeSlot && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{
+                overflow: "hidden", marginBottom: 16,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 12, padding: "14px",
+              }}
+            >
+              <p style={{ fontFamily: "var(--font-mundial)", fontSize: 12,
+                color: "rgba(255,255,255,0.5)", margin: "0 0 10px" }}>
+                {activeSlot.player === 1 ? "Player 1" : "Player 2"} — Slot {activeSlot.idx + 1}
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 140 }}>
+                  <span style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mundial)", fontSize: 14 }}>#</span>
+                  <input
+                    type="number" min="0" max="6968"
+                    value={slotInput}
+                    onChange={e => setSlotInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleAddCard(); }}
+                    placeholder="0–6968"
+                    style={{
+                      flex: 1, padding: "9px 12px",
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 8, color: "#fff",
+                      fontFamily: "var(--font-mundial)", fontSize: 14, outline: "none",
+                    }}
+                  />
+                </div>
                 <motion.button
-                  key={preview}
-                  onClick={() => setInput(String(preview))}
-                  whileHover={{ scale: 1.08, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
+                  onClick={handleAddCard}
+                  whileTap={{ scale: 0.93 }}
                   style={{
-                    padding: "9px 16px",
-                    background: bg,
-                    border: `1px solid ${border}`, borderRadius: 8,
-                    color: fg, fontFamily: "var(--font-brice)",
-                    fontSize: 14, fontWeight: 900, cursor: "pointer",
-                    textShadow: `0 0 12px ${fg}80`,
-                    boxShadow: `0 0 16px ${fg}20`,
+                    padding: "9px 16px", background: C.mint, color: "#0f0f1e",
+                    border: "none", borderRadius: 8,
+                    fontFamily: "var(--font-brice)", fontSize: 13, fontWeight: 900,
+                    cursor: "pointer",
                   }}
                 >
-                  #{preview}
+                  Add Card
                 </motion.button>
-              ))}
+                <motion.button
+                  onClick={handleRandom}
+                  whileTap={{ scale: 0.93 }}
+                  style={{
+                    padding: "9px 14px", background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    color: "#fff", borderRadius: 8,
+                    fontFamily: "var(--font-mundial)", fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  🎲 Random
+                </motion.button>
+                {activeSlot && (activeSlot.player === 1 ? p1Slots : p2Slots)[activeSlot.idx] !== null && (
+                  <motion.button
+                    onClick={() => { sfxClick(); removeSlot(activeSlot.player, activeSlot.idx); }}
+                    whileTap={{ scale: 0.93 }}
+                    style={{
+                      padding: "9px 14px", background: "rgba(255,60,60,0.12)",
+                      border: "1px solid rgba(255,100,100,0.3)",
+                      color: C.coral, borderRadius: 8,
+                      fontFamily: "var(--font-mundial)", fontSize: 13, cursor: "pointer",
+                    }}
+                  >
+                    Remove
+                  </motion.button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Wallet connect */}
+        <div style={{ marginBottom: 24 }}>
+          <WalletConnect onSelectToken={onSelectToken} />
+        </div>
+
+        {/* P2 Deck (Pass & Play) */}
+        <AnimatePresence>
+          {mode === "PASS_AND_PLAY" && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              style={{ overflow: "hidden", marginBottom: 24 }}
+            >
+              <p style={{ fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
+                color: C.coral, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                PLAYER 2 DECK ({p2Slots.filter(Boolean).length}/5)
+              </p>
+              {renderSlots(2, p2Slots)}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Start button */}
+        <motion.button
+          onClick={handleStart}
+          whileTap={canStart ? { scale: 0.95 } : {}}
+          disabled={!canStart}
+          style={{
+            width: "100%", padding: "18px",
+            background: canStart
+              ? "linear-gradient(135deg, #ff6b8a, #ffb347)"
+              : "rgba(255,255,255,0.08)",
+            color: canStart ? "#0f0f1e" : "rgba(255,255,255,0.25)",
+            border: "none", borderRadius: 16,
+            fontFamily: "var(--font-brice)", fontSize: 20, fontWeight: 900,
+            cursor: canStart ? "pointer" : "default",
+            letterSpacing: "0.04em",
+            boxShadow: canStart ? "0 8px 32px rgba(255,107,138,0.4)" : "none",
+            transition: "all 0.2s",
+          }}
+        >
+          {canStart ? "LET'S BATTLE ⚔️" : `Fill all ${mode === "VS_CPU" ? "5" : "10"} slots to start`}
+        </motion.button>
+
+        {!p1Complete && (
+          <p style={{ textAlign: "center", marginTop: 10, fontSize: 12,
+            color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)" }}>
+            Quick fill: click a slot, hit 🎲 Random five times
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SCREEN 4: BATTLE ARENA ───────────────────────────────────────────────────
+
+function BattleArenaScreen({
+  p1Deck,
+  p2Deck,
+  mode,
+  onEnd,
+  onHome,
+}: {
+  p1Deck: BattleCard[];
+  p2Deck: BattleCard[];
+  mode: BattleMode;
+  onEnd: (result: BattleResult) => void;
+  onHome: () => void;
+}) {
+  const [phase, setPhase]               = useState<ArenaPhase>("CHOOSE");
+  const [p1Hand, setP1Hand]             = useState<BattleCard[]>([...p1Deck]);
+  const [p2Hand, setP2Hand]             = useState<BattleCard[]>([...p2Deck]);
+  const [p1Played, setP1Played]         = useState<BattleCard | null>(null);
+  const [p2Played, setP2Played]         = useState<BattleCard | null>(null);
+  const [currentRound, setCurrentRound] = useState(0);
+  const [roundResults, setRoundResults] = useState<RoundResult[]>([]);
+  const [roundWinner, setRoundWinner]   = useState<RoundResult | null>(null);
+  const [shaking, setShaking]           = useState(false);
+  const [cpuDots, setCpuDots]           = useState(0);
+
+  const currentStat = ROUND_STATS[currentRound];
+  const p1Score = roundResults.filter(r => r === "P1").length;
+  const p2Score = roundResults.filter(r => r === "P2").length;
+
+  // CPU thinking dots
+  useEffect(() => {
+    if (phase !== "CPU_THINKING") return;
+    const iv = setInterval(() => setCpuDots(d => (d + 1) % 4), 350);
+    return () => clearInterval(iv);
+  }, [phase]);
+
+  const resolveRound = useCallback((p1Card: BattleCard, p2Card: BattleCard) => {
+    const result = compareCards(p1Card, p2Card, currentStat);
+    setShaking(true);
+    setTimeout(() => setShaking(false), 380);
+    sfxClash();
+    if (result === "P1") sfxRoundWin();
+    else if (result === "P2") sfxRoundLose();
+    setRoundWinner(result);
+    setRoundResults(prev => {
+      const next = [...prev, result];
+      setPhase("RESULT");
+      const nextRound = currentRound + 1;
+      setTimeout(() => {
+        if (nextRound >= 5) {
+          const p1Final = next.filter(r => r === "P1").length;
+          const p2Final = next.filter(r => r === "P2").length;
+          const winner: "P1" | "P2" | "DRAW" =
+            p1Final > p2Final ? "P1" : p2Final > p1Final ? "P2" : "DRAW";
+          if (winner === "P1") sfxVictory();
+          const bestCard = [...p1Deck].sort((a, b) => b.total - a.total)[0];
+          onEnd({ winner, p1Score: p1Final, p2Score: p2Final, roundResults: next, p1BestCard: bestCard });
+        } else {
+          setCurrentRound(nextRound);
+          setP1Played(null);
+          setP2Played(null);
+          setRoundWinner(null);
+          setPhase("CHOOSE");
+        }
+      }, 2200);
+      return next;
+    });
+  }, [currentStat, currentRound, p1Deck, onEnd]);
+
+  const playCard = useCallback((card: BattleCard) => {
+    sfxCardPlay();
+    setP1Hand(prev => prev.filter(c => c.tokenId !== card.tokenId));
+    setP1Played(card);
+
+    if (mode === "VS_CPU") {
+      setPhase("CPU_THINKING");
+      setTimeout(() => {
+        setP2Hand(prev => {
+          if (prev.length === 0) return prev;
+          const cpuCard = prev[Math.floor(Math.random() * prev.length)];
+          const nextHand = prev.filter(c => c.tokenId !== cpuCard.tokenId);
+          setP2Played(cpuCard);
+          setPhase("REVEAL");
+          setTimeout(() => resolveRound(card, cpuCard), 800);
+          return nextHand;
+        });
+      }, 1500);
+    } else {
+      setPhase("PASS_TO_P2");
+    }
+  }, [mode, resolveRound]);
+
+  const playCardP2 = useCallback((card: BattleCard) => {
+    sfxCardPlay();
+    setP2Hand(prev => prev.filter(c => c.tokenId !== card.tokenId));
+    setP2Played(card);
+    setPhase("REVEAL");
+    setTimeout(() => resolveRound(p1Played!, card), 800);
+  }, [p1Played, resolveRound]);
+
+  // BG color based on score
+  const bgColor = p1Score > p2Score
+    ? "linear-gradient(180deg, #0a1540, #0f0f2e)"
+    : p2Score > p1Score
+    ? "linear-gradient(180deg, #2a0a20, #1a0a18)"
+    : "linear-gradient(180deg, #1a0340, #0f0f1e)";
+
+  const roundResultIcon = (r: RoundResult) =>
+    r === "P1" ? { bg: C.mint, label: "W" }
+    : r === "P2" ? { bg: C.coral, label: "L" }
+    : { bg: "rgba(255,255,255,0.3)", label: "D" };
+
+  return (
+    <div style={{
+      minHeight: "100vh", position: "relative", overflow: "hidden",
+      background: bgColor, transition: "background 0.6s",
+    }}>
+      {/* PASS TO P2 overlay */}
+      <AnimatePresence>
+        {phase === "PASS_TO_P2" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 100,
+              background: "rgba(0,0,0,0.92)",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 24,
+            }}
+          >
+            <div style={{ fontSize: 48 }}>🙈</div>
+            <h3 style={{
+              fontFamily: "var(--font-brice)", fontSize: 28, fontWeight: 900,
+              color: C.sunshine, margin: 0, textAlign: "center",
+            }}>
+              PASS TO PLAYER 2
+            </h3>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mundial)", textAlign: "center", margin: 0 }}>
+              Don&apos;t let them see Player 1&apos;s choice!
+            </p>
+            <motion.button
+              onClick={() => { sfxClick(); setPhase("CHOOSE_P2"); }}
+              whileTap={{ scale: 0.93 }}
+              style={{
+                padding: "16px 36px",
+                background: "linear-gradient(135deg, #c084fc, #74d7f7)",
+                color: "#0f0f1e", border: "none", borderRadius: 16,
+                fontFamily: "var(--font-brice)", fontSize: 18, fontWeight: 900,
+                cursor: "pointer", letterSpacing: "0.04em",
+              }}
+            >
+              PLAYER 2 READY 🤙
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div style={{ padding: "16px 16px 24px", maxWidth: 600, margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <motion.button
+            onClick={() => { sfxClick(); onHome(); }}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              background: "transparent", border: "1px solid rgba(255,255,255,0.15)",
+              color: "rgba(255,255,255,0.4)", padding: "7px 12px", borderRadius: 8,
+              fontFamily: "var(--font-mundial)", fontSize: 12, cursor: "pointer",
+            }}
+          >
+            ✕
+          </motion.button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{
+              fontFamily: "var(--font-brice)", fontSize: 22, fontWeight: 900, color: C.sky,
+            }}>
+              {p1Score}
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)" }}>—</span>
+            <span style={{
+              fontFamily: "var(--font-brice)", fontSize: 22, fontWeight: 900, color: C.coral,
+            }}>
+              {p2Score}
+            </span>
+          </div>
+
+          <div style={{
+            fontFamily: "var(--font-mundial)", fontSize: 12,
+            color: "rgba(255,255,255,0.4)",
+          }}>
+            Round {Math.min(currentRound + 1, 5)}/5
+          </div>
+        </div>
+
+        {/* Round result indicators */}
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
+          {Array.from({ length: 5 }, (_, i) => {
+            const r = roundResults[i];
+            const style = r ? roundResultIcon(r) : { bg: "rgba(255,255,255,0.08)", label: "·" };
+            return (
+              <div key={i} style={{
+                width: 28, height: 28, borderRadius: "50%",
+                background: style.bg,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontFamily: "var(--font-brice)", fontWeight: 900,
+                color: r ? "#0f0f1e" : "rgba(255,255,255,0.25)",
+              }}>
+                {style.label}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* P2 hand / CPU area */}
+        <div style={{ marginBottom: 12 }}>
+          {mode === "VS_CPU" ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{
+                fontSize: 11, color: "rgba(255,255,255,0.35)",
+                fontFamily: "var(--font-mundial)", letterSpacing: "0.08em", marginBottom: 8,
+              }}>
+                {phase === "CPU_THINKING"
+                  ? `CPU IS THINKING${".".repeat(cpuDots)}`
+                  : "CPU"}
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                {p2Hand.map(card => (
+                  <BattleCardMini key={card.tokenId} card={card} faceDown disabled />
+                ))}
+                {p2Hand.length === 0 && p2Deck.length > 0 && (
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-mundial)" }}>
+                    All cards played
+                  </span>
+                )}
+              </div>
             </div>
+          ) : (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.08em", marginBottom: 8 }}>
+                PLAYER 2
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                {p2Hand.map(card => (
+                  <BattleCardMini
+                    key={card.tokenId}
+                    card={card}
+                    faceDown={phase !== "CHOOSE_P2"}
+                    disabled={phase !== "CHOOSE_P2"}
+                    onSelect={() => playCardP2(card)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Round stat badge */}
+        <motion.div
+          key={currentRound}
+          initial={{ scale: 0.7, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          style={{ textAlign: "center", marginBottom: 12 }}
+        >
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "8px 20px", borderRadius: 24,
+            background: `${STAT_COLORS[currentStat]}22`,
+            border: `2px solid ${STAT_COLORS[currentStat]}`,
+            boxShadow: `0 0 20px ${STAT_COLORS[currentStat]}44`,
+          }}>
+            <span style={{
+              fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+              color: STAT_COLORS[currentStat], letterSpacing: "0.08em",
+            }}>
+              {currentStat === "ENERGY" ? "⚡" : currentStat === "RARITY" ? "💎" : currentStat === "DRIP" ? "💧" : currentStat === "AURA" ? "✨" : "⭐"}{" "}
+              {STAT_LABELS[currentStat].toUpperCase()} — ROUND {currentRound + 1}
+            </span>
+          </div>
+        </motion.div>
+
+        {/* Arena center */}
+        <div className={shaking ? "arena-shake" : ""} style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          gap: 16, marginBottom: 12, minHeight: 240,
+        }}>
+          {/* P2 card */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>
+              {mode === "VS_CPU" ? "CPU" : "P2"}
+            </div>
+            {p2Played ? (
+              <BattleCardFull
+                card={p2Played}
+                highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
+                winner={roundWinner === "P2"}
+                loser={roundWinner === "P1"}
+              />
+            ) : (
+              <div style={{
+                width: 155, height: 210, borderRadius: 14,
+                border: "2px dashed rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.02)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 28 }}>?</span>
+              </div>
+            )}
+          </div>
+
+          {/* VS */}
+          <div style={{ textAlign: "center" }}>
+            <div style={{
+              fontFamily: "var(--font-brice)", fontSize: 24, fontWeight: 900,
+              color: "rgba(255,255,255,0.25)", lineHeight: 1,
+            }}>VS</div>
+          </div>
+
+          {/* P1 card */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>YOU</div>
+            {p1Played ? (
+              <BattleCardFull
+                card={p1Played}
+                highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
+                winner={roundWinner === "P1"}
+                loser={roundWinner === "P2"}
+              />
+            ) : (
+              <div style={{
+                width: 155, height: 210, borderRadius: 14,
+                border: "2px dashed rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.02)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 28 }}>?</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Round result message */}
+        <AnimatePresence>
+          {phase === "RESULT" && roundWinner && (
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{ textAlign: "center", marginBottom: 12 }}
+            >
+              <div style={{
+                display: "inline-block",
+                fontFamily: "var(--font-brice)", fontSize: 22, fontWeight: 900,
+                color: roundWinner === "P1" ? C.mint : roundWinner === "P2" ? C.coral : C.sunshine,
+                letterSpacing: "0.04em",
+              }}>
+                {roundWinner === "P1"
+                  ? "YOU WIN THIS ROUND! 🎉"
+                  : roundWinner === "P2"
+                  ? (mode === "VS_CPU" ? "CPU WINS THIS ROUND 😤" : "PLAYER 2 WINS! 🔥")
+                  : "TIE! 🤝"}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* P1 hand */}
+        <div style={{ marginTop: 8 }}>
+          <div style={{
+            fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)",
+            letterSpacing: "0.08em", marginBottom: 8, textAlign: "center",
+          }}>
+            {phase === "CHOOSE"
+              ? "CHOOSE A CARD TO PLAY"
+              : phase === "CHOOSE_P2"
+              ? "PLAYER 1 — WAITING"
+              : phase === "CPU_THINKING"
+              ? "WAITING FOR CPU..."
+              : "YOUR HAND"}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            {p1Hand.map(card => (
+              <BattleCardMini
+                key={card.tokenId}
+                card={card}
+                faceDown={phase === "CHOOSE_P2"}
+                disabled={phase !== "CHOOSE"}
+                onSelect={() => playCard(card)}
+              />
+            ))}
+            {p1Hand.length === 0 && (
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-mundial)" }}>
+                All cards played
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SCREEN 5: VICTORY ────────────────────────────────────────────────────────
+
+function VictoryScreen({
+  result,
+  p1Deck,
+  onBattle,
+  onPackRip,
+  onHome,
+}: {
+  result: BattleResult;
+  p1Deck: BattleCard[];
+  onBattle: () => void;
+  onPackRip: () => void;
+  onHome: () => void;
+}) {
+  const [shared, setShared] = useState(false);
+  const won  = result.winner === "P1";
+  const drew = result.winner === "DRAW";
+  const bestCard = result.p1BestCard ?? (p1Deck.length > 0 ? [...p1Deck].sort((a, b) => b.total - a.total)[0] : null);
+
+  const shareToX = () => {
+    const tokenId = bestCard?.tokenId ?? 0;
+    const score = `${result.p1Score}–${result.p2Score}`;
+    const text = won
+      ? `I just won a VIBE BATTLE ${score}! My GVC #${tokenId} vs CPU 🏆 Challenge me → aesr-gvc.vercel.app @goodvibesclub #VibeBattle #GoodVibesClub`
+      : `I battled hard in VIBE BATTLE ${score} with GVC #${tokenId}! Next time I'll win 💜 aesr-gvc.vercel.app @goodvibesclub #VibeBattle #GoodVibesClub`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank");
+    setShared(true);
+  };
+
+  const roundResultIcon = (r: RoundResult) =>
+    r === "P1" ? C.mint : r === "P2" ? C.coral : "rgba(255,255,255,0.3)";
+
+  return (
+    <div style={{
+      minHeight: "100vh", position: "relative", overflow: "hidden",
+      background: won
+        ? "linear-gradient(160deg, #1a0a40, #0a1540, #040c20)"
+        : "linear-gradient(160deg, #1a0240, #0f0f1e)",
+    }}>
+      {won && <Confetti />}
+
+      <div style={{
+        position: "relative", zIndex: 1,
+        minHeight: "100vh",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "40px 20px",
+        textAlign: "center",
+      }}>
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 18 }}
+          style={{ fontSize: 72, marginBottom: 8 }}
+        >
+          {won ? "🏆" : drew ? "🤝" : "💜"}
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className={won ? "shimmer-title" : undefined}
+          style={{
+            fontFamily: "var(--font-brice)",
+            fontSize: "clamp(40px, 10vw, 72px)",
+            fontWeight: 900,
+            margin: "0 0 8px",
+            ...(won ? {} : {
+              color: drew ? C.sunshine : C.lavender,
+            }),
+          }}
+        >
+          {won ? "YOU WIN!" : drew ? "IT'S A DRAW! 🤝" : "SO CLOSE..."}
+        </motion.h1>
+
+        {/* Score */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}
+        >
+          <span style={{
+            fontFamily: "var(--font-brice)", fontSize: 48, fontWeight: 900,
+            color: C.sky,
+          }}>
+            {result.p1Score}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)", fontSize: 24 }}>—</span>
+          <span style={{
+            fontFamily: "var(--font-brice)", fontSize: 48, fontWeight: 900,
+            color: C.coral,
+          }}>
+            {result.p2Score}
+          </span>
+        </motion.div>
+
+        {/* Round breakdown */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          style={{ display: "flex", gap: 8, marginBottom: 28 }}
+        >
+          {result.roundResults.map((r, i) => (
+            <div key={i} style={{
+              width: 32, height: 32, borderRadius: "50%",
+              background: roundResultIcon(r),
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontFamily: "var(--font-brice)", fontWeight: 900,
+              color: r !== "DRAW" ? "#0f0f1e" : "rgba(255,255,255,0.5)",
+            }}>
+              {r === "P1" ? "W" : r === "P2" ? "L" : "D"}
+            </div>
+          ))}
+        </motion.div>
+
+        {/* Best card */}
+        {bestCard && won && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.38 }}
+            style={{ marginBottom: 28 }}
+          >
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mundial)",
+              letterSpacing: "0.08em", marginBottom: 10 }}>
+              YOUR MVP CARD
+            </p>
+            <BattleCardFull card={bestCard} />
           </motion.div>
         )}
 
-        {/* ── Scoped CSS ── */}
-        <style>{`
-          /* ── iOS 3D fix: webkit-prefixed versions are required on Safari/Chrome iOS ── */
-          .card-rotator {
-            -webkit-transform-style: preserve-3d;
-            transform-style: preserve-3d;
-          }
-          .perspective-wrap {
-            -webkit-perspective: 1200px;
-            perspective: 1200px;
-          }
-          .card-face {
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-          }
-          .gvc-spinner {
-            width: 34px; height: 34px; border-radius: 50%;
-            border: 2px solid #FFE048; border-top-color: transparent;
-            animation: gvc-spin 0.8s linear infinite;
-          }
-          .card-shimmer {
-            background: linear-gradient(108deg, transparent 38%, rgba(255,224,72,0.07) 50%, transparent 62%);
-            animation: card-shimmer 3.5s ease-in-out infinite;
-          }
+        {/* Buttons */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}
+        >
+          <motion.button
+            onClick={() => { sfxClick(); onBattle(); }}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              padding: "14px 28px",
+              background: "linear-gradient(135deg, #c084fc, #74d7f7)",
+              color: "#0f0f1e", border: "none", borderRadius: 14,
+              fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+              cursor: "pointer", letterSpacing: "0.04em",
+            }}
+          >
+            BATTLE AGAIN ⚔️
+          </motion.button>
 
-          /* Legendary ongoing embers around card */
-          .lgd-ember {
-            width: 5px; height: 5px; border-radius: 50%;
-            background: #FF7A00;
-            box-shadow: 0 0 8px #FF7A00, 0 0 16px rgba(255,122,0,0.5);
-            animation: lgd-rise 3s ease-out infinite;
-          }
+          <motion.button
+            onClick={() => { sfxClick(); onPackRip(); }}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              padding: "14px 28px",
+              background: "linear-gradient(135deg, #ff6b8a, #ffb347)",
+              color: "#0f0f1e", border: "none", borderRadius: 14,
+              fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+              cursor: "pointer", letterSpacing: "0.04em",
+            }}
+          >
+            RIP A NEW PACK 🎴
+          </motion.button>
 
-          /* Rare ongoing sparkles around card */
-          .rare-spark {
-            width: 6px; height: 6px;
-            background: #A855F7;
-            box-shadow: 0 0 8px #A855F7, 0 0 14px rgba(168,85,247,0.5);
-            animation: rare-sparkle 2.4s ease-in-out infinite;
-            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-          }
+          {won && (
+            <motion.button
+              onClick={() => { sfxClick(); shareToX(); }}
+              whileTap={{ scale: 0.93 }}
+              style={{
+                padding: "14px 28px",
+                background: shared ? "rgba(255,255,255,0.08)" : "#000",
+                color: "#fff",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 14,
+                fontFamily: "var(--font-brice)", fontSize: 16, fontWeight: 900,
+                cursor: "pointer", letterSpacing: "0.04em",
+                display: "flex", alignItems: "center", gap: 8,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+              {shared ? "Shared! 🤙" : "SHARE WIN 🐦"}
+            </motion.button>
+          )}
 
-          @keyframes lgd-rise {
-            0%   { transform: translate(0, 0) scale(1); opacity: 0.9; }
-            80%  { opacity: 0.6; }
-            100% { transform: translate(calc((var(--drift, 0) - 0.5) * 40px), -120px) scale(0.2); opacity: 0; }
-          }
-          @keyframes rare-sparkle {
-            0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
-            30%      { opacity: 1; transform: scale(1.4) rotate(120deg); }
-            60%      { opacity: 0.8; transform: scale(1) rotate(240deg); }
-          }
+          <motion.button
+            onClick={() => { sfxClick(); onHome(); }}
+            whileTap={{ scale: 0.93 }}
+            style={{
+              padding: "14px 28px",
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.2)",
+              color: "rgba(255,255,255,0.5)",
+              borderRadius: 14,
+              fontFamily: "var(--font-mundial)", fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            Home
+          </motion.button>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
 
-          @keyframes gvc-spin {
-            to { transform: rotate(360deg); }
-          }
-          @keyframes card-shimmer {
-            0%   { transform: translateX(-220%) skewX(-14deg); opacity: 0; }
-            20%  { opacity: 1; }
-            80%  { opacity: 1; }
-            100% { transform: translateX(440%) skewX(-14deg); opacity: 0; }
-          }
-          @keyframes legendary-glow {
-            0%,100% {
-              box-shadow: 0 0 32px rgba(255,224,72,0.70),
-                          0 0 64px rgba(255,95,31,0.35),
-                          0 0 100px rgba(255,224,72,0.12);
-            }
-            50% {
-              box-shadow: 0 0 44px rgba(255,224,72,0.90),
-                          0 0 88px rgba(255,95,31,0.55),
-                          0 0 130px rgba(255,224,72,0.20);
-            }
-          }
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
-          input[type=number]::-webkit-inner-spin-button,
-          input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-          input[type=number] { -moz-appearance: textfield; }
+export default function Page() {
+  const [screen,       setScreen]       = useState<Screen>("HOME");
+  const [packCard,     setPackCard]     = useState<BattleCard | null>(null);
+  const [p1Deck,       setP1Deck]       = useState<BattleCard[]>([]);
+  const [p2Deck,       setP2Deck]       = useState<BattleCard[]>([]);
+  const [battleMode,   setBattleMode]   = useState<BattleMode>("VS_CPU");
+  const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
 
-          /* Mobile layout */
-          @media (max-width: 440px) {
-            .action-btns { flex-direction: column !important; }
-          }
-        `}</style>
-      </main>
-
+  return (
+    <>
+      <style>{GAME_CSS}</style>
+      <AnimatePresence mode="wait">
+        {screen === "HOME" && (
+          <motion.div key="home"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -40 }}
+            transition={{ duration: 0.3 }}
+          >
+            <HomeScreen
+              onPackRip={() => setScreen("PACK_RIP")}
+              onBattle={() => setScreen("BATTLE_SETUP")}
+            />
+          </motion.div>
+        )}
+        {screen === "PACK_RIP" && (
+          <motion.div key="pack"
+            initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
+            transition={{ duration: 0.3 }}
+          >
+            <PackRipScreen
+              onBattle={card => { setPackCard(card); setScreen("BATTLE_SETUP"); }}
+              onRipAgain={() => setPackCard(null)}
+              onHome={() => setScreen("HOME")}
+            />
+          </motion.div>
+        )}
+        {screen === "BATTLE_SETUP" && (
+          <motion.div key="setup"
+            initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
+            transition={{ duration: 0.3 }}
+          >
+            <BattleSetupScreen
+              initialCard={packCard ?? undefined}
+              onStart={(p1, p2, mode) => {
+                setP1Deck(p1); setP2Deck(p2); setBattleMode(mode);
+                setScreen("BATTLE_ARENA");
+              }}
+              onHome={() => setScreen("HOME")}
+            />
+          </motion.div>
+        )}
+        {screen === "BATTLE_ARENA" && (
+          <motion.div key="arena"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <BattleArenaScreen
+              p1Deck={p1Deck} p2Deck={p2Deck} mode={battleMode}
+              onEnd={result => { setBattleResult(result); setScreen("VICTORY"); }}
+              onHome={() => setScreen("HOME")}
+            />
+          </motion.div>
+        )}
+        {screen === "VICTORY" && battleResult && (
+          <motion.div key="victory"
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <VictoryScreen
+              result={battleResult} p1Deck={p1Deck}
+              onBattle={() => { setBattleResult(null); setScreen("BATTLE_SETUP"); }}
+              onPackRip={() => { setBattleResult(null); setScreen("PACK_RIP"); }}
+              onHome={() => { setBattleResult(null); setScreen("HOME"); }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
