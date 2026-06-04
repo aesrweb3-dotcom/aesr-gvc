@@ -102,15 +102,24 @@ const TIER_GLOW: Record<Tier, string> = {
 
 // ─── RESPONSIVE CARD SIZE ─────────────────────────────────────────────────────
 
-const DESIGN_W = 400;
-const DESIGN_H = 560;
+const DESIGN_W = 420;
+const DESIGN_H = 588;
 
 function useCardSize() {
-  const [cardW, setCardW] = useState(() =>
-    typeof window === "undefined" ? DESIGN_W : Math.min(DESIGN_W, window.innerWidth - 40)
-  );
+  const [cardW, setCardW] = useState(() => {
+    if (typeof window === "undefined") return DESIGN_W;
+    const vw = window.innerWidth;
+    return vw < 600
+      ? Math.round(vw * 0.9)
+      : Math.min(DESIGN_W, Math.max(380, vw - 80));
+  });
   useEffect(() => {
-    const update = () => setCardW(Math.min(DESIGN_W, window.innerWidth - 40));
+    const update = () => {
+      const vw = window.innerWidth;
+      setCardW(vw < 600
+        ? Math.round(vw * 0.9)
+        : Math.min(DESIGN_W, Math.max(380, vw - 80)));
+    };
     window.addEventListener("resize", update, { passive: true });
     return () => window.removeEventListener("resize", update);
   }, []);
@@ -174,27 +183,31 @@ function FallbackArt({ id }: { id: number }) {
 
 // ─── TIER BURST (one-shot particles on card reveal) ───────────────────────────
 
-function TierBurst({ tier, id }: { tier: Tier; id: number }) {
+function TierBurst({ tier, id, nftColors }: { tier: Tier; id: number; nftColors?: string[] }) {
   const rng = seededRNG(id * 4321 + 99);
-  const colorMap = {
-    Common:    ["#FFE048", "#FFF3A0", "#FFD700"],
-    Rare:      ["#A855F7", "#C084FC", "#7C3AED"],
-    Legendary: ["#FF7A00", "#FFE048", "#FF5F1F"],
+  const baseColors = {
+    Common:    ["#FFE048", "#FFF3A0", "#FFD700", "#FFFFFF", "#A3E635"],
+    Rare:      ["#A855F7", "#C084FC", "#7C3AED", "#EC4899", "#60A5FA"],
+    Legendary: ["#FF7A00", "#FFE048", "#FF5F1F", "#FBBF24", "#F97316"],
   };
-  const colors = colorMap[tier];
-  const count = { Common: 16, Rare: 22, Legendary: 28 }[tier];
+  const colors = [
+    ...baseColors[tier],
+    ...(nftColors ?? []),
+  ];
+  const count = { Common: 28, Rare: 40, Legendary: 55 }[tier];
 
   const particles = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * 360 + rng() * 22;
-    const dist  = 80 + rng() * 130;
+    const angle = (i / count) * 360 + rng() * 28;
+    const dist  = 100 + rng() * 220;
     const rad   = angle * Math.PI / 180;
+    const size  = 4 + Math.floor(rng() * 10);
     return {
       tx:    Math.cos(rad) * dist,
       ty:    Math.sin(rad) * dist,
-      size:  3 + Math.floor(rng() * 7),
+      size,
       color: colors[Math.floor(rng() * colors.length)],
-      delay: rng() * 0.25,
-      dur:   0.8 + rng() * 0.7,
+      delay: rng() * 0.3,
+      dur:   1.0 + rng() * 1.0,
     };
   });
 
@@ -208,7 +221,7 @@ function TierBurst({ tier, id }: { tier: Tier; id: number }) {
             width: p.size, height: p.size,
             marginLeft: -p.size / 2, marginTop: -p.size / 2,
             borderRadius: "50%", background: p.color,
-            boxShadow: `0 0 ${p.size * 2}px ${p.color}90`,
+            boxShadow: `0 0 ${p.size * 3}px ${p.color}, 0 0 ${p.size * 6}px ${p.color}60`,
           }}
           initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
           animate={{ x: p.tx, y: p.ty, opacity: 0, scale: 0 }}
@@ -249,11 +262,12 @@ function TierAura({ tier }: { tier: Tier }) {
 // ─── BACKGROUND ORBS ─────────────────────────────────────────────────────────
 
 const ORB_DEFS = [
-  { x: "12%", y: "20%", size: 420, color: "rgba(255,224,72,0.05)",  delay: 0,  dur: 24 },
-  { x: "82%", y: "55%", size: 480, color: "rgba(255,95,31,0.04)",   delay: 8,  dur: 30 },
-  { x: "46%", y: "85%", size: 560, color: "rgba(255,224,72,0.038)", delay: 3,  dur: 36 },
-  { x: "90%", y: "8%",  size: 300, color: "rgba(168,85,247,0.03)",  delay: 15, dur: 20 },
-  { x: "5%",  y: "68%", size: 380, color: "rgba(255,224,72,0.032)", delay: 6,  dur: 27 },
+  { x: "18%", y: "18%", size: 700, color: "rgba(139,92,246,0.14)",  delay: 0,  dur: 28 }, // purple
+  { x: "78%", y: "55%", size: 750, color: "rgba(236,72,153,0.10)",  delay: 7,  dur: 34 }, // pink
+  { x: "48%", y: "92%", size: 860, color: "rgba(255,224,72,0.07)",  delay: 3,  dur: 44 }, // gold
+  { x: "88%", y: "8%",  size: 520, color: "rgba(20,184,166,0.09)",  delay: 14, dur: 22 }, // teal
+  { x: "8%",  y: "72%", size: 620, color: "rgba(168,85,247,0.11)",  delay: 5,  dur: 32 }, // purple 2
+  { x: "58%", y: "32%", size: 580, color: "rgba(245,158,11,0.08)",  delay: 19, dur: 38 }, // amber
 ];
 
 function BackgroundOrbs() {
@@ -278,24 +292,25 @@ function BackgroundOrbs() {
 
 // ─── WATERMARK ────────────────────────────────────────────────────────────────
 
-function Watermark() {
-  return (
-    <div style={{
-      position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-    }}>
-      <p style={{
-        fontFamily: "var(--font-brice)",
-        fontSize: "clamp(52px, 16vw, 150px)",
-        fontWeight: 900, color: "rgba(255,224,72,0.022)",
-        textTransform: "uppercase", letterSpacing: "0.14em",
-        whiteSpace: "nowrap", transform: "rotate(-14deg)",
-        userSelect: "none", margin: 0,
-      }}>
-        GOOD VIBES CLUB
-      </p>
-    </div>
-  );
+function Watermark() { return null; }
+
+// ─── RGB TO HSL HELPER ───────────────────────────────────────────────────────
+function rgbToHsl(r: number, g: number, b: number) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g-b)/d + (g<b?6:0)) / 6; break;
+      case g: h = ((b-r)/d + 2) / 6; break;
+      case b: h = ((r-g)/d + 4) / 6; break;
+    }
+    h *= 360;
+  }
+  return { h, s, l };
 }
 
 // ─── VIBE CARD ────────────────────────────────────────────────────────────────
@@ -305,16 +320,58 @@ interface VibeCardProps {
   data: CardData;
   frontRef: React.RefObject<HTMLDivElement>;
   onFirstReveal?: () => void;
+  onNftColors?: (colors: string[]) => void;
 }
 
-function VibeCard({ id, data, frontRef, onFirstReveal }: VibeCardProps) {
+function VibeCard({ id, data, frontRef, onFirstReveal, onNftColors }: VibeCardProps) {
   const { cardW, cardH, scale } = useCardSize();
-  const [flipped,  setFlipped]  = useState(false);
-  const [tilt,     setTilt]     = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [holo,     setHolo]     = useState({ x: 50, y: 50 });
-  const [imgState, setImgState] = useState<"loading" | "loaded" | "error">("loading");
+  const [flipped,   setFlipped]   = useState(false);
+  const [tilt,      setTilt]      = useState({ x: 0, y: 0 });
+  const [dragging,  setDragging]  = useState(false);
+  const [holo,      setHolo]      = useState({ x: 50, y: 50 });
+  const [imgState,  setImgState]  = useState<"loading" | "loaded" | "error">("loading");
+  const [nftColors, setNftColors] = useState<string[]>([]);
   const drag = useRef({ sx: 0, sy: 0, tx: 0, ty: 0, moved: false, down: false });
+
+  const sampleNFTColors = useCallback((img: HTMLImageElement) => {
+    try {
+      const cv = document.createElement("canvas");
+      cv.width = 40; cv.height = 40;
+      const c = cv.getContext("2d"); if (!c) return;
+      c.drawImage(img, 0, 0, 40, 40);
+      const { data } = c.getImageData(0, 0, 40, 40);
+      const map = new Map<string, number>();
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        if (a < 200) continue;
+        const qr = Math.round(r/28)*28, qg = Math.round(g/28)*28, qb = Math.round(b/28)*28;
+        const k = `${qr},${qg},${qb}`;
+        map.set(k, (map.get(k)??0)+1);
+      }
+      const sorted = [...map.entries()]
+        .filter(([k]) => {
+          const [r,g,b] = k.split(",").map(Number);
+          const { s, l } = rgbToHsl(r,g,b);
+          return s > 0.28 && l > 0.15 && l < 0.88;
+        })
+        .sort((a,b) => b[1]-a[1]);
+      const picked: string[] = [];
+      for (const [k] of sorted) {
+        const [r,g,b] = k.split(",").map(Number);
+        const { h } = rgbToHsl(r,g,b);
+        if (!picked.some(p => {
+          const [pr,pg,pb] = p.split(",").map(Number);
+          return Math.abs(rgbToHsl(pr,pg,pb).h - h) < 45;
+        })) {
+          picked.push(k);
+          if (picked.length >= 3) break;
+        }
+      }
+      const colors = picked.map(k => { const [r,g,b]=k.split(",").map(Number); return `rgb(${r},${g},${b})`; });
+      setNftColors(colors);
+      onNftColors?.(colors);
+    } catch {}
+  }, [onNftColors]);
 
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -349,6 +406,18 @@ function VibeCard({ id, data, frontRef, onFirstReveal }: VibeCardProps) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       {/* Card + aura wrapper */}
       <div style={{ position: "relative" }}>
+        {/* NFT-colour sampled pulsing glow */}
+        {nftColors.length >= 1 && (
+          <motion.div
+            style={{ position: "absolute", inset: -6, borderRadius: 22, zIndex: 0, pointerEvents: "none" }}
+            animate={{ boxShadow: [
+              `0 0 50px ${nftColors[0]}70, 0 0 100px ${nftColors[0]}35${nftColors[1] ? `, 0 0 140px ${nftColors[1]}20` : ""}`,
+              `0 0 80px ${nftColors[0]}95, 0 0 150px ${nftColors[0]}55${nftColors[1] ? `, 0 0 200px ${nftColors[1]}35` : ""}`,
+              `0 0 50px ${nftColors[0]}70, 0 0 100px ${nftColors[0]}35${nftColors[1] ? `, 0 0 140px ${nftColors[1]}20` : ""}`,
+            ]}}
+            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
         <TierAura tier={tier} />
 
         {/* Perspective container — matches scaled card dimensions */}
@@ -406,7 +475,7 @@ function VibeCard({ id, data, frontRef, onFirstReveal }: VibeCardProps) {
                     objectFit: "cover", objectPosition: "center top",
                     display: imgState === "loaded" ? "block" : "none",
                   }}
-                  onLoad={() => setImgState("loaded")}
+                  onLoad={e => { setImgState("loaded"); sampleNFTColors(e.currentTarget); }}
                   onError={() => setImgState("error")}
                 />
               </div>
@@ -489,17 +558,16 @@ function VibeCard({ id, data, frontRef, onFirstReveal }: VibeCardProps) {
                   &ldquo;{quote}&rdquo;
                 </p>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 4 }}>
                   {([["RARITY",rarity],["DRIP",drip],["ENERGY",energy],["AURA",aura]] as [string,number][]).map(([lbl,val]) => (
-                    <div key={lbl} style={{
-                      background: "rgba(5,5,5,0.75)", borderRadius: 8, padding: "5px 4px",
-                      textAlign: "center", border: "1px solid rgba(255,224,72,0.16)",
-                    }}>
-                      <p style={{ fontFamily: "var(--font-mundial)", fontSize: 8.5, color: "rgba(255,255,255,0.38)", margin: 0, letterSpacing: "0.08em" }}>{lbl}</p>
+                    <div key={lbl} style={{ textAlign: "center", padding: "4px 2px" }}>
+                      <p style={{ fontFamily: "var(--font-mundial)", fontSize: 8, color: "rgba(255,255,255,0.32)", margin: 0, letterSpacing: "0.1em", textTransform: "uppercase" }}>{lbl}</p>
                       <p style={{
-                        fontFamily: "var(--font-brice)", fontSize: 24, fontWeight: 900,
-                        color: "#FFE048", margin: 0, lineHeight: 1,
-                        textShadow: val >= 80 ? "0 0 16px rgba(255,224,72,0.9)" : "none",
+                        fontFamily: "var(--font-brice)", fontSize: 27, fontWeight: 900,
+                        color: "#FFE048", margin: 0, lineHeight: 1.1,
+                        textShadow: val >= 80
+                          ? "0 0 18px rgba(255,224,72,1), 0 0 40px rgba(255,224,72,0.6)"
+                          : "0 0 12px rgba(255,224,72,0.4)",
                       }}>{val}</p>
                     </div>
                   ))}
@@ -684,8 +752,8 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
   // Shared tab face — repeating shaka tile pattern
   const tabFace = (
     <>
-      {/* Dark base */}
-      <div style={{ position:"absolute",inset:0, background:"#111" }} />
+      {/* Colourful base */}
+      <div style={{ position:"absolute",inset:0, background:"linear-gradient(135deg,#2d0b5e,#1e0840,#3d2200,#1a0d00)" }} />
       {/* Repeating shaka grid */}
       <div style={{
         position:"absolute", inset:0,
@@ -792,7 +860,7 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
             position:"absolute", top: TAB_H, left:0,
             width:PACK_W, height: PACK_H - TAB_H,
             borderRadius:"0 0 12px 12px", overflow:"hidden",
-            background:"linear-gradient(155deg,#171717 0%,#282828 28%,#161616 52%,#222 78%,#131313 100%)",
+            background:"linear-gradient(155deg,#1e0840 0%,#2d0b5e 20%,#1a0535 42%,#2a1400 65%,#3d2200 82%,#1a1000 100%)",
           }}
         >
           <div style={{ position:"absolute",top:0,bottom:0,left:0,width:3,background:goldV,zIndex:3 }} />
@@ -884,6 +952,7 @@ export default function Page() {
   const [generating,   setGenerating]   = useState(false);
   const [showBurst,    setShowBurst]    = useState(false);
   const [packRevealed, setPackRevealed] = useState(false);
+  const [nftColors,    setNftColors]    = useState<string[]>([]);
   const frontRef = useRef<HTMLDivElement>(null!);
 
   const generateById = useCallback((id: number) => {
@@ -891,6 +960,7 @@ export default function Page() {
     setGenerating(true);
     setShowBurst(false);
     setPackRevealed(false);
+    setNftColors([]);
     setTimeout(() => {
       setTokenId(id);
       setCardData(generateCardData(id));
@@ -1107,21 +1177,22 @@ export default function Page() {
           animate={{ opacity: 1, y: 0 }}
           style={{ textAlign: "center", marginBottom: 28 }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 32, height: 32 }} />
+            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 44, height: 44 }} />
             <h1 className="text-shimmer" style={{
               fontFamily: "var(--font-brice)",
-              fontSize: "clamp(28px, 6.5vw, 46px)",
+              fontSize: "clamp(36px, 8.5vw, 62px)",
               fontWeight: 900, margin: 0,
               textTransform: "uppercase", letterSpacing: "0.05em",
+              textShadow: "0 0 60px rgba(255,224,72,0.55), 0 0 120px rgba(255,224,72,0.2)",
             }}>
               THE VIBE CARD
             </h1>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 32, height: 32 }} />
+            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 44, height: 44 }} />
           </div>
-          <p style={{ color: "rgba(255,255,255,0.36)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>
+          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>
             GVC Collectible Card Generator
           </p>
         </motion.div>
@@ -1156,23 +1227,25 @@ export default function Page() {
               (e.currentTarget as HTMLInputElement).style.boxShadow   = "none";
             }}
           />
-          <button
+          <motion.button
             onClick={generate}
             disabled={generating}
+            animate={generating
+              ? { scale: [1, 1.04, 1], boxShadow: ["0 0 12px rgba(255,224,72,0.4)","0 0 28px rgba(255,224,72,0.8)","0 0 12px rgba(255,224,72,0.4)"] }
+              : { boxShadow: "0 0 0px rgba(255,224,72,0)" }}
+            transition={{ duration: 0.75, repeat: generating ? Infinity : 0, ease: "easeInOut" }}
+            whileTap={!generating ? { scale: 0.95 } : {}}
             style={{
-              padding: "13px 20px", background: "#FFE048", color: "#080808",
+              padding: "13px 24px", background: "#FFE048", color: "#080808",
               border: "none", borderRadius: 10,
-              fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
+              fontFamily: "var(--font-brice)", fontSize: 15, fontWeight: 900,
               textTransform: "uppercase", letterSpacing: "0.05em",
               cursor: generating ? "default" : "pointer",
-              opacity: generating ? 0.7 : 1, whiteSpace: "nowrap",
-              transition: "opacity 0.2s, transform 0.12s",
+              opacity: generating ? 0.85 : 1, whiteSpace: "nowrap",
             }}
-            onMouseDown={e => { if (!generating) (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.96)"; }}
-            onMouseUp={e   => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
           >
             {generating ? "…" : "Generate"}
-          </button>
+          </motion.button>
         </motion.div>
 
         {/* ── Wallet (inline, below input) ── */}
@@ -1223,9 +1296,9 @@ export default function Page() {
                 style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}
               >
                 {/* Burst particles */}
-                {showBurst && <TierBurst key={`burst-${tokenId}`} tier={cardData.tier} id={tokenId} />}
+                {showBurst && <TierBurst key={`burst-${tokenId}`} tier={cardData.tier} id={tokenId} nftColors={nftColors} />}
 
-                <VibeCard id={tokenId} data={cardData} frontRef={frontRef} />
+                <VibeCard id={tokenId} data={cardData} frontRef={frontRef} onNftColors={setNftColors} />
 
                 {/* Action buttons */}
                 <motion.div
@@ -1299,29 +1372,29 @@ export default function Page() {
               Try #142, #420, #1337, or any ID from 0–6968
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 22, flexWrap: "wrap" }}>
-              {[142, 420, 1337, 6968].map(preview => (
-                <button
+              {([
+                { id: 142,  fg: "#C084FC", bg: "rgba(192,132,252,0.1)",  border: "rgba(192,132,252,0.35)" },
+                { id: 420,  fg: "#F472B6", bg: "rgba(244,114,182,0.1)",  border: "rgba(244,114,182,0.35)" },
+                { id: 1337, fg: "#22D3EE", bg: "rgba(34,211,238,0.1)",   border: "rgba(34,211,238,0.35)"  },
+                { id: 6968, fg: "#FFE048", bg: "rgba(255,224,72,0.1)",   border: "rgba(255,224,72,0.35)"  },
+              ]).map(({ id: preview, fg, bg, border }) => (
+                <motion.button
                   key={preview}
                   onClick={() => setInput(String(preview))}
+                  whileHover={{ scale: 1.08, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
                   style={{
-                    padding: "8px 14px",
-                    background: "rgba(255,224,72,0.05)",
-                    border: "1px solid rgba(255,224,72,0.18)", borderRadius: 8,
-                    color: "rgba(255,224,72,0.65)", fontFamily: "var(--font-brice)",
-                    fontSize: 13, fontWeight: 900, cursor: "pointer",
-                    transition: "background 0.16s, border-color 0.16s",
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.background  = "rgba(255,224,72,0.1)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,224,72,0.4)";
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.background  = "rgba(255,224,72,0.05)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,224,72,0.18)";
+                    padding: "9px 16px",
+                    background: bg,
+                    border: `1px solid ${border}`, borderRadius: 8,
+                    color: fg, fontFamily: "var(--font-brice)",
+                    fontSize: 14, fontWeight: 900, cursor: "pointer",
+                    textShadow: `0 0 12px ${fg}80`,
+                    boxShadow: `0 0 16px ${fg}20`,
                   }}
                 >
                   #{preview}
-                </button>
+                </motion.button>
               ))}
             </div>
           </motion.div>

@@ -22,6 +22,8 @@ html {
 }
 
 body {
+  background: radial-gradient(ellipse at 50% 20%, #1e0540 0%, #0e0325 32%, #080808 68%);
+  background-attachment: fixed;
   background-color: #080808;
   color: #ffffff;
   -webkit-font-smoothing: antialiased;
