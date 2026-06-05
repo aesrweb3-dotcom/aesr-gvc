@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { publicClient, GVC_ADDRESS, BALANCE_ABI } from "@/lib/wagmi";
+import { publicClient, GVC_ADDRESS, BALANCE_ABI, DELEGATE_REGISTRY, DELEGATE_ABI } from "@/lib/wagmi";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -13,11 +13,12 @@ interface Props {
 }
 
 export function WalletConnect({ onSelectToken }: Props) {
-  const [address,       setAddress]       = useState<string | null>(null);
-  const [tokens,        setTokens]        = useState<number[]>([]);
-  const [loading,       setLoading]       = useState(false);
-  const [connecting,    setConnecting]    = useState(false);
-  const [error,         setError]         = useState<string | null>(null);
+  const [address,        setAddress]        = useState<string | null>(null);
+  // Each entry carries the token id and whether it came from a delegated vault
+  const [tokens,         setTokens]         = useState<{ id: number; delegated: boolean; vault?: string }[]>([]);
+  const [loading,        setLoading]        = useState(false);
+  const [connecting,     setConnecting]     = useState(false);
+  const [error,          setError]          = useState<string | null>(null);
   const [showCollection, setShowCollection] = useState(false);
 
   // Keep in sync with account changes (MetaMask accountsChanged event)
@@ -45,36 +46,98 @@ export function WalletConnect({ onSelectToken }: Props) {
     return () => provider.removeListener("accountsChanged", onAccountsChanged);
   }, []);
 
+  // Fetch GVC token IDs for a single address. Returns [] on failure (caller handles errors).
+  const fetchTokensForAddress = useCallback(async (addr: string): Promise<number[]> => {
+    const balance = await publicClient.readContract({
+      address: GVC_ADDRESS,
+      abi: BALANCE_ABI,
+      functionName: "balanceOf",
+      args: [addr as `0x${string}`],
+    });
+    const count = Number(balance);
+    if (count === 0) return [];
+    const ids = await Promise.all(
+      Array.from({ length: Math.min(count, 200) }, (_, i) =>
+        publicClient.readContract({
+          address: GVC_ADDRESS,
+          abi: BALANCE_ABI,
+          functionName: "tokenOfOwnerByIndex",
+          args: [addr as `0x${string}`, BigInt(i)],
+        })
+      )
+    );
+    return ids.map(Number);
+  }, []);
+
   const fetchTokens = useCallback(async (addr: string) => {
     setLoading(true);
     setError(null);
     try {
-      const balance = await publicClient.readContract({
-        address: GVC_ADDRESS,
-        abi: BALANCE_ABI,
-        functionName: "balanceOf",
-        args: [addr as `0x${string}`],
-      });
-      const count = Number(balance);
-      if (count === 0) { setTokens([]); return; }
+      // 1. Tokens owned directly by the connected wallet
+      const ownIds = await fetchTokensForAddress(addr).catch(() => [] as number[]);
 
-      const ids = await Promise.all(
-        Array.from({ length: Math.min(count, 200) }, (_, i) =>
-          publicClient.readContract({
-            address: GVC_ADDRESS,
-            abi: BALANCE_ABI,
-            functionName: "tokenOfOwnerByIndex",
-            args: [addr as `0x${string}`, BigInt(i)],
+      // 2. Check delegate.cash v2 for any vault wallets that delegated to this hot wallet.
+      //    This is a pure read — no signing, no permissions granted.
+      let vaultEntries: { id: number; vault: string }[] = [];
+      try {
+        const delegations = await publicClient.readContract({
+          address: DELEGATE_REGISTRY,
+          abi: DELEGATE_ABI,
+          functionName: "getIncomingDelegations",
+          args: [addr as `0x${string}`],
+        });
+
+        // Accept only "all contracts" (type 1) or "this specific contract" (type 2) delegations.
+        // Reject type 3 (single token) to keep the surface minimal.
+        // Cap at 10 vault addresses to prevent abuse / runaway RPC calls.
+        const vaultAddresses = [
+          ...new Set(
+            (delegations as readonly { type_: number; from: string; contract_: string }[])
+              .filter(d =>
+                d.type_ === 1 ||
+                (d.type_ === 2 && d.contract_.toLowerCase() === GVC_ADDRESS.toLowerCase())
+              )
+              .map(d => d.from.toLowerCase())
+          ),
+        ].slice(0, 10);
+
+        // Fetch tokens from each vault, ignoring per-vault failures gracefully
+        const vaultResults = await Promise.allSettled(
+          vaultAddresses.map(async (vault) => {
+            const ids = await fetchTokensForAddress(vault);
+            return ids.map(id => ({ id, vault }));
           })
-        )
-      );
-      setTokens(ids.map(Number).sort((a, b) => a - b));
+        );
+
+        vaultEntries = vaultResults
+          .filter((r): r is PromiseFulfilledResult<{ id: number; vault: string }[]> => r.status === "fulfilled")
+          .flatMap(r => r.value);
+      } catch {
+        // Delegation lookup failed — silently continue with own tokens only.
+        // This is intentional: a registry outage shouldn't block the user.
+      }
+
+      // 3. Merge, deduplicate (own wallet takes priority), sort
+      const seenIds = new Set<number>();
+      const merged: { id: number; delegated: boolean; vault?: string }[] = [];
+
+      for (const id of ownIds) {
+        if (!seenIds.has(id)) { seenIds.add(id); merged.push({ id, delegated: false }); }
+      }
+      for (const { id, vault } of vaultEntries) {
+        if (!seenIds.has(id)) { seenIds.add(id); merged.push({ id, delegated: true, vault }); }
+      }
+
+      merged.sort((a, b) => a.id - b.id);
+      setTokens(merged);
+
+      if (merged.length === 0) setError(null);
     } catch {
       setError("Couldn't load tokens — contract may not support enumeration.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchTokensForAddress]);
 
   useEffect(() => {
     if (address) {
@@ -204,7 +267,12 @@ export function WalletConnect({ onSelectToken }: Props) {
           {tokens.length > 0 && (
             <span style={{ fontFamily: "var(--font-brice)", fontSize: 11, fontWeight: 900,
               color: "#FFE048", letterSpacing: "0.05em" }}>
-              {tokens.length} GVC
+              {tokens.filter(t => !t.delegated).length} GVC
+              {tokens.some(t => t.delegated) && (
+                <span style={{ color: "#FF6B9D", marginLeft: 4 }}>
+                  +{tokens.filter(t => t.delegated).length} delegated
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -285,8 +353,8 @@ export function WalletConnect({ onSelectToken }: Props) {
                   gap: 10, maxHeight: 380, overflowY: "auto",
                   paddingRight: 4,
                 }}>
-                  {tokens.map(id => (
-                    <TokenThumb key={id} id={id} onSelect={() => onSelectToken(id)} />
+                  {tokens.map(t => (
+                    <TokenThumb key={t.id} id={t.id} delegated={t.delegated} onSelect={() => onSelectToken(t.id)} />
                   ))}
                 </div>
               )}
@@ -298,7 +366,7 @@ export function WalletConnect({ onSelectToken }: Props) {
   );
 }
 
-function TokenThumb({ id, onSelect }: { id: number; onSelect: () => void }) {
+function TokenThumb({ id, delegated, onSelect }: { id: number; delegated: boolean; onSelect: () => void }) {
   const [imgState, setImgState] = useState<"loading"|"loaded"|"error">("loading");
 
   return (
@@ -347,6 +415,11 @@ function TokenThumb({ id, onSelect }: { id: number; onSelect: () => void }) {
         textAlign: "center",
       }}>
         #{id}
+        {delegated && (
+          <span style={{ display: "block", fontSize: 8, color: "#FF6B9D", letterSpacing: "0.04em" }}>
+            delegated
+          </span>
+        )}
       </div>
       <div style={{
         position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
