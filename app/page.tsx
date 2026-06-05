@@ -1141,20 +1141,6 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
 // ─── SCREEN 1: HOME ───────────────────────────────────────────────────────────
 
 function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: () => void }) {
-  const [floorEth, setFloorEth]   = useState<number | null>(null);
-  const [vol24h,   setVol24h]     = useState<number | null>(null);
-
-  useEffect(() => {
-    // Timestamp busts any CDN / browser cache so we always get live data
-    fetch(`https://api-hazel-pi-72.vercel.app/api/stats?_=${Date.now()}`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(d => {
-        if (typeof d.floorPrice === "number" && d.floorPrice > 0) setFloorEth(d.floorPrice);
-        // Only show 24h vol when there were actual sales (> 0.001 ETH)
-        if (typeof d.volume24h  === "number" && d.volume24h  > 0.001) setVol24h(d.volume24h);
-      })
-      .catch(() => {});
-  }, []);
 
   return (
     <div className="vb-bg" style={{ minHeight: "100vh", position: "relative", overflow: "hidden" }}>
@@ -1226,30 +1212,7 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
           </motion.button>
         </motion.div>
 
-        {/* Live market data — small, subtle, below buttons */}
-        <AnimatePresence>
-          {(floorEth !== null || vol24h !== null) && (
-            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.5 }}
-              style={{ display:"flex",gap:12,alignItems:"center",justifyContent:"center",marginTop:20,flexWrap:"wrap" }}>
-              {floorEth !== null && (
-                <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(116,215,247,0.55)",letterSpacing:"0.05em" }}>
-                  <svg width="7" height="11" viewBox="0 0 10 16" fill="rgba(116,215,247,0.55)"><polygon points="5,0 10,8 5,16 0,8"/><polygon points="5,0 10,8 5,10 0,8" opacity="0.5"/></svg>
-                  {floorEth.toFixed(3)} ETH Floor
-                </span>
-              )}
-              {floorEth !== null && vol24h !== null && (
-                <span style={{ color:"rgba(255,255,255,0.12)",fontSize:10 }}>·</span>
-              )}
-              {vol24h !== null && (
-                <span style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,179,71,0.55)",letterSpacing:"0.05em" }}>
-                  {vol24h.toFixed(2)} ETH 24h Vol
-                </span>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.6 }}
+        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.5 }}
           style={{ marginTop:32,fontSize:12,color:"rgba(255,255,255,0.25)",fontFamily:"var(--font-mundial)" }}>
           Built by @imaesr for the GVC Vibeathon 🤙
         </motion.p>
