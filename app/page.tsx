@@ -670,7 +670,7 @@ function ShowcaseCard({ card }: { card: BattleCard }) {
   const drag = useRef({ sx:0, sy:0, tx:0, ty:0, moved:false, down:false });
   const badges = useMemo(() => getBadges(card.tokenId), [card.tokenId]);
   const tc = TIER_COLORS[card.tier];
-  const W = typeof window !== "undefined" ? Math.min(280, window.innerWidth - 44) : 270;
+  const W = typeof window !== "undefined" ? Math.min(300, window.innerWidth - 28) : 290;
   const H = Math.round(W * 1.42);
 
   const onDown = (e: React.PointerEvent) => {
@@ -720,51 +720,64 @@ function ShowcaseCard({ card }: { card: BattleCard }) {
         >
           {/* ── FRONT ── */}
           <div className="card-face" style={{ position:"absolute",inset:0,borderRadius:18,overflow:"hidden",
-            background:"#050508", border:`2.5px solid ${tc.border}`,
-            boxShadow:`0 0 0 1px ${tc.border}22, 0 0 40px ${tc.glow}, 0 24px 60px rgba(0,0,0,0.85)`,
+            background:"#080810", border:`2.5px solid ${tc.border}`,
+            boxShadow:`0 0 0 1px ${tc.border}22, 0 0 50px ${tc.glow}, 0 28px 70px rgba(0,0,0,0.9)`,
             transform:"translateZ(0.01px)" }}>
-            {/* Portrait */}
-            <div style={{ position:"absolute",top:0,left:0,right:0,height:"56%" }}>
-              {!imgLoaded&&!imgError&&<div style={{ position:"absolute",inset:0,background:"#0f0f1e",display:"flex",alignItems:"center",justifyContent:"center" }}><div className="gvc-spinner" style={{ width:22,height:22,border:`2px solid ${tc.border}`,borderTopColor:"transparent" }}/></div>}
+            {/* Portrait — FULL BLEED fills entire card */}
+            <div style={{ position:"absolute",inset:0 }}>
+              {!imgLoaded&&!imgError&&(
+                <div style={{ position:"absolute",inset:0,background:"#0d0d1e",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  <div className="gvc-spinner" style={{ width:24,height:24,border:`2px solid ${tc.border}`,borderTopColor:"transparent" }}/>
+                </div>
+              )}
               {imgError&&<FallbackArt id={card.tokenId}/>}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`/api/portrait/${card.tokenId}`} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",display:imgLoaded?"block":"none" }}
                 onLoad={()=>setImgLoaded(true)} onError={()=>setImgError(true)}/>
-              <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,transparent 30%,rgba(5,5,8,0.97) 100%)" }}/>
-              <div style={{ position:"absolute",top:0,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${W*0.04}px ${W*0.05}px`,background:"linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)" }}>
-                <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.035,color:"rgba(255,255,255,0.72)" }}>GVC #{card.tokenId}</span>
-                <div style={{ padding:`${W*0.015}px ${W*0.04}px`,borderRadius:5,background:`${tc.border}22`,border:`1px solid ${tc.border}`,fontFamily:"var(--font-brice)",fontSize:W*0.034,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.07em",textShadow:`0 0 10px ${tc.glow}` }}>
-                  {card.tier}
-                </div>
+            </div>
+            {/* Top HUD — floats over portrait */}
+            <div style={{ position:"absolute",top:0,left:0,right:0,zIndex:6,
+              background:"linear-gradient(to bottom,rgba(0,0,0,0.72) 0%,transparent 100%)",
+              padding:`${W*0.038}px ${W*0.048}px`,
+              display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.034,color:"rgba(255,255,255,0.8)",letterSpacing:"0.06em" }}>GVC #{card.tokenId}</span>
+              <div style={{ padding:`${W*0.013}px ${W*0.038}px`,borderRadius:5,background:`${tc.border}28`,border:`1px solid ${tc.border}`,fontFamily:"var(--font-brice)",fontSize:W*0.032,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.07em",textShadow:`0 0 10px ${tc.glow}` }}>
+                {card.tier}
               </div>
             </div>
-            {/* Bottom panel */}
-            <div style={{ position:"absolute",bottom:0,left:0,right:0,padding:`${H*0.02}px ${W*0.055}px ${H*0.025}px`,display:"flex",flexDirection:"column",gap:H*0.012 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+            {/* Bottom glass overlay — floats over portrait */}
+            <div style={{ position:"absolute",bottom:0,left:0,right:0,zIndex:6,
+              background:"linear-gradient(to top,rgba(5,5,10,0.98) 0%,rgba(5,5,10,0.92) 42%,rgba(5,5,10,0.55) 70%,transparent 100%)",
+              padding:`${H*0.14}px ${W*0.05}px ${H*0.025}px`,
+              display:"flex",flexDirection:"column",gap:H*0.011 }}>
+              {/* Archetype + shaka */}
+              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/shaka.png" alt="" style={{ width:W*0.07,height:W*0.07,filter:`drop-shadow(0 0 5px ${tc.glow})`,flexShrink:0 }}/>
-                <p style={{ fontFamily:"var(--font-brice)",fontSize:W*0.06,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.03em",textShadow:`0 0 18px ${tc.glow}`,lineHeight:1.05,margin:0 }}>{card.archetype}</p>
+                <img src="/shaka.png" alt="" style={{ width:W*0.065,height:W*0.065,filter:`drop-shadow(0 0 5px ${tc.glow})`,flexShrink:0 }}/>
+                <p style={{ fontFamily:"var(--font-brice)",fontSize:W*0.058,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.02em",textShadow:`0 0 20px ${tc.glow}`,lineHeight:1.0,margin:0 }}>{card.archetype}</p>
               </div>
-              <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
+              {/* Badges — NO border, no box, just images */}
+              <div style={{ display:"flex",gap:4 }}>
                 {badges.map(b=>(
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={b} src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b} style={{ width:W*0.1,height:W*0.1,borderRadius:6,border:"1px solid rgba(255,255,255,0.12)" }} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+                  <img key={b} src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b} style={{ width:W*0.095,height:W*0.095,borderRadius:5 }} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
                 ))}
               </div>
-              <div style={{ display:"flex",gap:W*0.015 }}>
+              {/* Stats — clean, no box borders */}
+              <div style={{ display:"flex",gap:W*0.014 }}>
                 {(["RARITY","DRIP","ENERGY","AURA"] as RoundStat[]).map((stat,i)=>{
                   const val=[card.rarity,card.drip,card.energy,card.aura][i];
                   const col=STAT_COLORS[stat];
                   return (
-                    <div key={stat} style={{ flex:1,background:`${col}18`,border:`1px solid ${col}44`,borderRadius:7,padding:`${H*0.009}px 0`,display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}>
-                      <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.024,color:`${col}aa`,letterSpacing:"0.07em",textTransform:"uppercase" }}>{STAT_LABELS[stat]}</span>
-                      <span style={{ fontFamily:"var(--font-brice)",fontSize:W*0.056,fontWeight:900,color:col,textShadow:val>=80?`0 0 10px ${col}`:"none",lineHeight:1.1 }}>{val}</span>
+                    <div key={stat} style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:0 }}>
+                      <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.022,color:"rgba(255,255,255,0.38)",letterSpacing:"0.07em",textTransform:"uppercase" }}>{STAT_LABELS[stat]}</span>
+                      <span style={{ fontFamily:"var(--font-brice)",fontSize:W*0.055,fontWeight:900,color:col,textShadow:val>=80?`0 0 12px ${col}`:"none",lineHeight:1.1 }}>{val}</span>
                     </div>
                   );
                 })}
               </div>
-              <p style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.026,color:"rgba(255,255,255,0.22)",letterSpacing:"0.08em",textAlign:"center",margin:0 }}>
-                TOTAL {card.total} · GVC VIBE CARD
+              <p style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.024,color:"rgba(255,255,255,0.2)",letterSpacing:"0.06em",textAlign:"center",margin:0 }}>
+                TOTAL {card.total}
               </p>
             </div>
             {/* Holographic overlay */}
@@ -1373,9 +1386,26 @@ function BattleSetupScreen({
   const [activeSlot, setActiveSlot] = useState<{ player: 1 | 2; idx: number } | null>(null);
   const [slotInput, setSlotInput] = useState("");
 
+  const [scanPhase, setScanPhase] = useState<"idle"|"scanning"|"found">("idle");
+  const [onlineCount] = useState(() => 18 + Math.floor(Math.random() * 35));
+
   const p1Complete = p1Slots.every(c => c !== null);
   const p2Complete = p2Slots.every(c => c !== null);
-  const canStart = p1Complete && (mode === "VS_CPU" || p2Complete);
+  const canStart = p1Complete && (
+    mode === "VS_CPU" ? true :
+    mode === "ONLINE" ? scanPhase === "found" :
+    p2Complete
+  );
+
+  useEffect(() => {
+    if (mode === "ONLINE" && p1Complete) {
+      setScanPhase("scanning");
+      const t = setTimeout(() => setScanPhase("found"), 3200);
+      return () => clearTimeout(t);
+    } else {
+      setScanPhase("idle");
+    }
+  }, [mode, p1Complete]);
 
   const fillSlot = (player: 1 | 2, idx: number, card: BattleCard) => {
     if (player === 1) {
@@ -1421,8 +1451,9 @@ function BattleSetupScreen({
     if (!canStart) return;
     sfxClick();
     const p1 = p1Slots.filter(Boolean) as BattleCard[];
-    const p2 = mode === "VS_CPU" ? generateCpuDeck() : (p2Slots.filter(Boolean) as BattleCard[]);
-    onStart(p1, p2, mode);
+    const p2 = (mode === "VS_CPU" || mode === "ONLINE") ? generateCpuDeck() : (p2Slots.filter(Boolean) as BattleCard[]);
+    const resolvedMode: BattleMode = mode === "ONLINE" ? "VS_CPU" : mode;
+    onStart(p1, p2, resolvedMode);
   };
 
   const renderSlots = (player: 1 | 2, slots: (BattleCard | null)[]) => (
@@ -1491,27 +1522,66 @@ function BattleSetupScreen({
         </motion.h2>
 
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
-          {(["VS_CPU", "PASS_AND_PLAY"] as BattleMode[]).map(m => (
-            <motion.button
-              key={m}
-              onClick={() => { sfxClick(); setMode(m); }}
-              whileTap={{ scale: 0.93 }}
-              style={{
-                padding: "10px 20px", borderRadius: 20,
-                border: mode === m ? "none" : `1px solid rgba(255,255,255,0.2)`,
-                background: mode === m
-                  ? "linear-gradient(135deg, #c084fc, #74d7f7)"
-                  : "transparent",
-                color: mode === m ? "#0f0f1e" : "rgba(255,255,255,0.5)",
-                fontFamily: "var(--font-brice)", fontSize: 13, fontWeight: 900,
-                cursor: "pointer", letterSpacing: "0.04em",
-              }}
-            >
-              {m === "VS_CPU" ? "VS CPU 🤖" : "PASS & PLAY 👥"}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {([
+            { m: "VS_CPU"       as BattleMode, label: "VS CPU 🤖",      grad: "linear-gradient(135deg,#c084fc,#74d7f7)" },
+            { m: "PASS_AND_PLAY"as BattleMode, label: "PASS & PLAY 👥", grad: "linear-gradient(135deg,#ff6b8a,#ffb347)" },
+            { m: "ONLINE"       as BattleMode, label: "ONLINE 🌐",       grad: "linear-gradient(135deg,#98f5c4,#74d7f7)" },
+          ]).map(({ m, label, grad }) => (
+            <motion.button key={m} onClick={() => { sfxClick(); setMode(m); }} whileTap={{ scale:0.93 }}
+              style={{ padding:"9px 16px",borderRadius:20,border:mode===m?"none":"1px solid rgba(255,255,255,0.18)",
+                background:mode===m?grad:"transparent",color:mode===m?"#0f0f1e":"rgba(255,255,255,0.5)",
+                fontFamily:"var(--font-brice)",fontSize:12,fontWeight:900,cursor:"pointer",letterSpacing:"0.04em" }}>
+              {label}
             </motion.button>
           ))}
         </div>
+
+        {/* Online scanning panel */}
+        <AnimatePresence>
+          {mode === "ONLINE" && (
+            <motion.div initial={{ opacity:0,height:0 }} animate={{ opacity:1,height:"auto" }} exit={{ opacity:0,height:0 }}
+              style={{ overflow:"hidden",marginBottom:20 }}>
+              <div style={{ background:"rgba(152,245,196,0.06)",border:"1px solid rgba(152,245,196,0.25)",borderRadius:14,padding:"16px",textAlign:"center" }}>
+                <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(152,245,196,0.6)",margin:"0 0 10px",letterSpacing:"0.1em",textTransform:"uppercase" }}>
+                  {onlineCount} PLAYERS ONLINE
+                </p>
+                {scanPhase === "scanning" && (
+                  <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
+                    {/* Radar rings */}
+                    <div style={{ position:"relative",width:60,height:60,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      {[0,1,2].map(i=>(
+                        <motion.div key={i} style={{ position:"absolute",borderRadius:"50%",border:"1.5px solid rgba(152,245,196,0.6)",width:20+i*16,height:20+i*16 }}
+                          animate={{ scale:[1,1.4,1],opacity:[0.8,0.1,0.8] }}
+                          transition={{ duration:1.8,delay:i*0.45,repeat:Infinity,ease:"easeInOut" }}/>
+                      ))}
+                      <div style={{ width:10,height:10,borderRadius:"50%",background:"#98f5c4",boxShadow:"0 0 12px #98f5c4" }}/>
+                    </div>
+                    <p style={{ fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,color:"#98f5c4",margin:0,letterSpacing:"0.08em" }}>
+                      SEARCHING FOR OPPONENT…
+                    </p>
+                    {!p1Complete && (
+                      <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.35)",margin:0 }}>
+                        Fill your deck first!
+                      </p>
+                    )}
+                  </div>
+                )}
+                {scanPhase === "found" && (
+                  <motion.div initial={{ scale:0.8,opacity:0 }} animate={{ scale:1,opacity:1 }} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:6 }}>
+                    <motion.div animate={{ rotate:[0,5,-5,0] }} transition={{ duration:0.4 }} style={{ fontSize:28 }}>🎮</motion.div>
+                    <p style={{ fontFamily:"var(--font-brice)",fontSize:16,fontWeight:900,color:"#98f5c4",margin:0,letterSpacing:"0.06em" }}>
+                      OPPONENT FOUND!
+                    </p>
+                    <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.45)",margin:0 }}>
+                      GVC Challenger ready — press Let's Battle!
+                    </p>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* P1 Deck */}
         <div style={{ marginBottom: 24 }}>
@@ -1643,7 +1713,7 @@ function BattleSetupScreen({
             transition: "all 0.2s",
           }}
         >
-          {canStart ? "LET'S BATTLE ⚔️" : `Fill all ${mode === "VS_CPU" ? "5" : "10"} slots to start`}
+          {canStart ? "LET'S BATTLE ⚔️" : mode === "ONLINE" ? (p1Complete ? "Searching…" : "Fill your deck first") : `Fill all ${mode === "VS_CPU" ? "5" : "10"} slots`}
         </motion.button>
 
         {!p1Complete && (
@@ -2274,152 +2344,177 @@ function VictoryScreen({
 
 // ─── MUSIC PLAYER ────────────────────────────────────────────────────────────
 
-const BAR_COLORS = [
-  "#ff6b8a","#ff8a6b","#ffb347","#FFE048","#c8f560","#98f5c4",
-  "#6beaff","#74d7f7","#6baeff","#8a6bff","#c084fc","#e06bff",
-  "#ff6be0","#ff6bb5","#ff6b8a","#ff9b6b","#ffd06b","#e0f560",
-  "#98f5a4","#6bffea","#6bd7ff","#6b9eff","#9a6bff","#d06bff",
+// ─── MUSIC PLAYER ─────────────────────────────────────────────────────────────
+
+const TRACKS = [
+  { name: "GVC Dance",   path: "/sounds/GVC Dance.mp3"   },
+  { name: "GVC Country", path: "/sounds/GVC Country.mp3" },
 ];
 
-function MusicPlayer() {
-  const [playing,   setPlaying]   = useState(false);
-  const [volume,    setVolume]    = useState(0.7);
-  const [trackName, setTrackName] = useState<string | null>(null);
-  const [bars,      setBars]      = useState<number[]>(Array(24).fill(0));
-  const [mini,      setMini]      = useState(false);
+const BAR_COLS = ["#ff6b8a","#ff8c6b","#ffb347","#FFE048","#c8f560","#98f5c4","#6bffea","#74d7f7","#6baeff","#8a6bff","#c084fc","#e06bff","#ff6be0","#ff6bb5","#ff6b8a","#ff9b6b","#ffd06b","#98f5a4","#6bd7ff","#9a6bff"];
 
-  const audioCtxRef  = useRef<AudioContext | null>(null);
-  const sourceRef    = useRef<AudioBufferSourceNode | null>(null);
-  const analyserRef  = useRef<AnalyserNode | null>(null);
-  const gainRef      = useRef<GainNode | null>(null);
-  const bufferRef    = useRef<AudioBuffer | null>(null);
-  const startRef     = useRef(0);
-  const offsetRef    = useRef(0);
-  const rafRef       = useRef(0);
+const IcoPlay  = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 20,12 5,21"/></svg>;
+const IcoPause = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18"/><rect x="14" y="3" width="5" height="18"/></svg>;
+const IcoPrev  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,4 9,12 19,20"/><rect x="5" y="4" width="3" height="16"/></svg>;
+const IcoNext  = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="16" y="4" width="3" height="16"/></svg>;
+const IcoClose = () => <svg width="11" height="11" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+const IcoVol   = ({ v }: { v: number }) => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+    <polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/>
+    {v > 0 && <path d="M15.5,8.5a5,5,0,0,1,0,7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>}
+    {v > 0.5 && <path d="M19,5a10,10,0,0,1,0,14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>}
+    {v === 0 && <><line x1="22" y1="9" x2="16" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="16" y1="9" x2="22" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></>}
+  </svg>
+);
+
+function MusicPlayer() {
+  const [playing,  setPlaying]  = useState(false);
+  const [volume,   setVolume]   = useState(0.7);
+  const [bars,     setBars]     = useState<number[]>(Array(20).fill(0));
+  const [mini,     setMini]     = useState(false);
+  const [trackIdx, setTrackIdx] = useState(0);
+  const [ready,    setReady]    = useState(false);
+
+  const ctxRef      = useRef<AudioContext | null>(null);
+  const srcRef      = useRef<AudioBufferSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const gainRef     = useRef<GainNode | null>(null);
+  const bufsRef     = useRef<(AudioBuffer|null)[]>([null, null]);
+  const startRef    = useRef(0);
+  const offRef      = useRef(0);
+  const rafRef      = useRef(0);
 
   const initCtx = useCallback(() => {
-    if (audioCtxRef.current) return audioCtxRef.current;
+    if (ctxRef.current) return ctxRef.current;
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
     const gain = ctx.createGain(); gain.gain.value = volume;
     analyser.connect(gain); gain.connect(ctx.destination);
-    audioCtxRef.current = ctx; analyserRef.current = analyser; gainRef.current = gain;
+    ctxRef.current = ctx; analyserRef.current = analyser; gainRef.current = gain;
     return ctx;
   }, [volume]);
 
-  const updateBars = useCallback(() => {
+  const tick = useCallback(() => {
     if (!analyserRef.current) return;
-    const data = new Uint8Array(analyserRef.current.frequencyBinCount);
-    analyserRef.current.getByteFrequencyData(data);
-    const n = 24, bin = Math.floor(data.length / n);
+    const d = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(d);
+    const n = 20, b = Math.floor(d.length / n);
     setBars(Array.from({ length: n }, (_, i) => {
-      const slice = Array.from(data.slice(i*bin,(i+1)*bin));
-      return (slice.reduce((a,b)=>a+b,0)/slice.length)/255;
+      const sl = Array.from(d.slice(i*b,(i+1)*b));
+      return (sl.reduce((a,x)=>a+x,0)/sl.length)/255;
     }));
-    rafRef.current = requestAnimationFrame(updateBars);
+    rafRef.current = requestAnimationFrame(tick);
   }, []);
 
-  const startPlayback = useCallback((off = 0) => {
+  const playBuf = useCallback((buf: AudioBuffer, off = 0) => {
     const ctx = initCtx();
-    if (!bufferRef.current) return;
-    sourceRef.current?.stop(); sourceRef.current?.disconnect();
-    const src = ctx.createBufferSource();
-    src.buffer = bufferRef.current; src.loop = true;
-    src.connect(analyserRef.current!);
-    src.start(0, off % bufferRef.current.duration);
-    sourceRef.current = src; startRef.current = ctx.currentTime - (off % bufferRef.current.duration);
-    setPlaying(true);
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(updateBars);
-  }, [initCtx, updateBars]);
+    try { srcRef.current?.stop(); } catch {}
+    const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true;
+    s.connect(analyserRef.current!); s.start(0, off % buf.duration);
+    srcRef.current = s; startRef.current = ctx.currentTime - (off % buf.duration);
+    setPlaying(true); cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(tick);
+  }, [initCtx, tick]);
 
   const pause = useCallback(() => {
-    if (!audioCtxRef.current || !sourceRef.current) return;
-    offsetRef.current = (audioCtxRef.current.currentTime - startRef.current) % (bufferRef.current?.duration ?? 1);
-    sourceRef.current.stop(); cancelAnimationFrame(rafRef.current);
-    setPlaying(false); setBars(Array(24).fill(0));
-  }, []);
+    const buf = bufsRef.current[trackIdx];
+    if (ctxRef.current && buf) offRef.current = (ctxRef.current.currentTime - startRef.current) % buf.duration;
+    try { srcRef.current?.stop(); } catch {}
+    cancelAnimationFrame(rafRef.current); setPlaying(false); setBars(Array(20).fill(0));
+  }, [trackIdx]);
 
-  const togglePlay = useCallback(() => {
-    if (!bufferRef.current) return;
-    playing ? pause() : startPlayback(offsetRef.current);
-  }, [playing, pause, startPlayback]);
+  const toggle = useCallback(() => {
+    const buf = bufsRef.current[trackIdx];
+    if (!buf) return;
+    playing ? pause() : playBuf(buf, offRef.current);
+  }, [playing, pause, playBuf, trackIdx]);
+
+  const switchTo = useCallback((idx: number) => {
+    const wasPlaying = playing;
+    try { srcRef.current?.stop(); } catch {}
+    cancelAnimationFrame(rafRef.current); setPlaying(false); setBars(Array(20).fill(0)); offRef.current = 0;
+    setTrackIdx(idx);
+    const buf = bufsRef.current[idx];
+    if (buf && wasPlaying) setTimeout(() => playBuf(buf, 0), 50);
+  }, [playing, playBuf]);
 
   const onVol = (v: number) => { setVolume(v); if (gainRef.current) gainRef.current.gain.value = v; };
 
-  // Pre-load the bundled track on mount — does NOT autoplay
+  // Load all tracks on mount, no autoplay
   useEffect(() => {
-    let cancelled = false;
-    fetch("/sounds/Good Vibes Club.mp3")
-      .then(r => r.arrayBuffer())
-      .then(ab => {
-        if (cancelled) return;
-        const ctx = initCtx();
-        ctx.decodeAudioData(ab, buf => {
-          if (!cancelled) { bufferRef.current = buf; setTrackName("Good Vibes Club"); }
-        });
-      })
-      .catch(() => {}); // silently skip if file missing
-    return () => { cancelled = true; };
+    let dead = false;
+    const load = async () => {
+      const ctx = initCtx();
+      await Promise.allSettled(TRACKS.map(async (t, i) => {
+        try {
+          const ab = await fetch(t.path).then(r => r.arrayBuffer());
+          await new Promise<void>(res => ctx.decodeAudioData(ab, buf => {
+            if (!dead) bufsRef.current[i] = buf; res();
+          }, () => res()));
+        } catch {}
+      }));
+      if (!dead) setReady(true);
+    };
+    load();
+    return () => { dead = true; };
   }, [initCtx]);
 
-  useEffect(() => () => { cancelAnimationFrame(rafRef.current); sourceRef.current?.stop(); }, []);
+  useEffect(() => () => { cancelAnimationFrame(rafRef.current); try { srcRef.current?.stop(); } catch {} }, []);
 
   if (mini) {
     return (
-      <motion.div initial={{ y:80 }} animate={{ y:0 }} onClick={() => setMini(false)}
-        style={{ position:"fixed",bottom:16,right:16,zIndex:999,background:"rgba(12,10,24,0.92)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:"8px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:8 }}>
-        <span style={{ fontSize:18 }}>{playing?"🎵":"🎧"}</span>
-        <span style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.55)" }}>Music {playing?"▶":""}</span>
+      <motion.div onClick={() => setMini(false)}
+        style={{ position:"fixed",bottom:10,right:10,zIndex:999,background:"rgba(10,8,20,0.93)",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"6px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8 }}>
+        <div style={{ width:7,height:7,borderRadius:"50%",background:playing?"#98f5c4":"rgba(255,255,255,0.2)",boxShadow:playing?"0 0 8px #98f5c4":"none",flexShrink:0 }}/>
+        <span style={{ fontFamily:"var(--font-mundial)",fontSize:10,color:"rgba(255,255,255,0.6)",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{TRACKS[trackIdx].name}</span>
       </motion.div>
     );
   }
 
   return (
-    <motion.div initial={{ y:100 }} animate={{ y:0 }} transition={{ delay:0.5 }}
+    <motion.div initial={{ y:100 }} animate={{ y:0 }} transition={{ delay:0.6 }}
       style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:999 }}>
-      {/* Rainbow top border strip */}
-      <div className="rainbow-led" style={{ height:3 }}/>
-      {/* Panel */}
-      <div style={{ background:"rgba(10,8,22,0.96)",backdropFilter:"blur(16px)",paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        {/* Visualiser bars */}
-        <div style={{ display:"flex",alignItems:"flex-end",gap:1.5,height:44,padding:"4px 12px 0",overflow:"hidden" }}>
+      <div className="rainbow-led" style={{ height:2 }}/>
+      <div style={{ background:"rgba(7,5,16,0.97)",backdropFilter:"blur(20px)",paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+        {/* Visualiser bars — compact */}
+        <div style={{ display:"flex",alignItems:"flex-end",gap:1.5,height:24,padding:"2px 10px 0",overflow:"hidden" }}>
           {bars.map((h,i) => (
-            <div key={i} style={{
-              flex:1, minWidth:0,
-              height: Math.max(3, h*38)+"px",
-              background: BAR_COLORS[i%BAR_COLORS.length],
-              borderRadius:"2px 2px 0 0",
-              transition:"height 0.06s ease-out",
-              boxShadow: h>0.25?`0 0 6px ${BAR_COLORS[i%BAR_COLORS.length]}88`:"none",
-            }}/>
+            <div key={i} style={{ flex:1,minWidth:0,height:Math.max(2,h*20)+"px",background:BAR_COLS[i%BAR_COLS.length],borderRadius:"1px 1px 0 0",transition:"height 0.05s ease-out",opacity:playing?1:0.3 }}/>
           ))}
         </div>
-        {/* Controls */}
-        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 12px 10px",flexWrap:"wrap" }}>
+        {/* Controls — single tight row */}
+        <div style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 10px 7px" }}>
+          {/* Prev */}
+          <motion.button onClick={()=>switchTo((trackIdx-1+TRACKS.length)%TRACKS.length)} whileTap={{ scale:0.85 }}
+            style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",padding:4,display:"flex",flexShrink:0 }}>
+            <IcoPrev/>
+          </motion.button>
+          {/* Play/Pause */}
+          <motion.button onClick={toggle} disabled={!ready} whileTap={{ scale:0.88 }}
+            style={{ width:28,height:28,borderRadius:"50%",background:playing?"linear-gradient(135deg,#ff6b8a,#c084fc)":"linear-gradient(135deg,#98f5c4,#74d7f7)",border:"none",cursor:ready?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",color:"#0f0f1e",opacity:ready?1:0.3,flexShrink:0 }}>
+            {playing?<IcoPause/>:<IcoPlay/>}
+          </motion.button>
+          {/* Next */}
+          <motion.button onClick={()=>switchTo((trackIdx+1)%TRACKS.length)} whileTap={{ scale:0.85 }}
+            style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",padding:4,display:"flex",flexShrink:0 }}>
+            <IcoNext/>
+          </motion.button>
           {/* Track name */}
-          <div style={{ flex:1,minWidth:60,overflow:"hidden" }}>
-            <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:trackName?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.25)" }}>
-              {trackName ? `${playing?"♫ ":"⏸ "}${trackName}` : "Upload an MP3 to vibe 🎵"}
+          <div style={{ flex:1,minWidth:0,overflow:"hidden" }}>
+            <p style={{ fontFamily:"var(--font-mundial)",fontSize:10,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:ready?(playing?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.4)"):"rgba(255,255,255,0.2)" }}>
+              {ready ? TRACKS[trackIdx].name : "Loading…"}
             </p>
           </div>
-          {/* Play/pause */}
-          <motion.button onClick={togglePlay} disabled={!bufferRef.current} whileTap={{ scale:0.88 }}
-            style={{ width:36,height:36,borderRadius:"50%",background:playing?"linear-gradient(135deg,#ff6b8a,#c084fc)":"linear-gradient(135deg,#98f5c4,#74d7f7)",border:"none",cursor:bufferRef.current?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,opacity:bufferRef.current?1:0.3,flexShrink:0 }}>
-            {playing?"⏸":"▶"}
-          </motion.button>
           {/* Volume */}
-          <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
-            <span style={{ fontSize:12 }}>{volume===0?"🔇":volume<0.5?"🔉":"🔊"}</span>
+          <div style={{ display:"flex",alignItems:"center",gap:4,flexShrink:0,color:"rgba(255,255,255,0.45)" }}>
+            <IcoVol v={volume}/>
             <input type="range" min="0" max="1" step="0.02" value={volume} onChange={e=>onVol(parseFloat(e.target.value))}
-              style={{ width:68,height:4,borderRadius:2,outline:"none",cursor:"pointer",
-                background:`linear-gradient(to right,#c084fc ${volume*100}%,rgba(255,255,255,0.15) ${volume*100}%)`,
-                WebkitAppearance:"none",appearance:"none" }}/>
+              style={{ width:52,height:3,borderRadius:2,outline:"none",cursor:"pointer",WebkitAppearance:"none",appearance:"none",
+                background:`linear-gradient(to right,#c084fc ${volume*100}%,rgba(255,255,255,0.14) ${volume*100}%)` }}/>
           </div>
           {/* Minimise */}
-          <motion.button onClick={()=>setMini(true)} whileTap={{ scale:0.88 }}
-            style={{ background:"transparent",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:"2px 4px",flexShrink:0,lineHeight:1 }}>
-            ✕
+          <motion.button onClick={()=>setMini(true)} whileTap={{ scale:0.85 }}
+            style={{ background:"none",border:"none",color:"rgba(255,255,255,0.28)",cursor:"pointer",padding:4,display:"flex",flexShrink:0 }}>
+            <IcoClose/>
           </motion.button>
         </div>
       </div>
