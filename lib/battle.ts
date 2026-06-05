@@ -3,7 +3,7 @@
 export type BattleTier = "Common" | "Rare" | "Legendary";
 export type RoundStat = "RARITY" | "DRIP" | "ENERGY" | "AURA" | "TOTAL";
 export type RoundResult = "P1" | "P2" | "DRAW";
-export type BattleMode = "VS_CPU" | "PASS_AND_PLAY" | "ONLINE";
+export type BattleMode = "VS_CPU" | "PASS_AND_PLAY";
 export type Screen = "HOME" | "PACK_RIP" | "BATTLE_SETUP" | "BATTLE_ARENA" | "VICTORY";
 export type ArenaPhase = "CHOOSE" | "CPU_THINKING" | "PASS_TO_P2" | "CHOOSE_P2" | "REVEAL" | "RESULT" | "NEXT_ROUND";
 

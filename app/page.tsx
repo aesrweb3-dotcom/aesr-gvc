@@ -598,65 +598,112 @@ function BattleCardFull({ card, highlightStat, winner, loser, faceDown }: Battle
 
 async function downloadShowcaseCard(card: BattleCard, badges: string[]) {
   try {
-    const W = 420, H = 592;
-    const cv = document.createElement("canvas"); cv.width = W*2; cv.height = H*2;
-    const ctx = cv.getContext("2d")!; ctx.scale(2,2);
+    const W = 420, H = 596; // same ratio as on-screen card (1.42)
+    const S = 2; // retina scale
+    const cv = document.createElement("canvas"); cv.width = W*S; cv.height = H*S;
+    const ctx = cv.getContext("2d")!; ctx.scale(S,S);
     const tc = TIER_COLORS[card.tier];
+    const statCols = ["#ff6b8a","#74d7f7","#98f5c4","#c084fc"] as const;
+
     const rr = (x:number,y:number,w:number,h:number,r:number) => {
       ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
       ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
       ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
     };
-    const loadImg = (src:string) => new Promise<HTMLImageElement>(res => {
+    const load = (src:string) => new Promise<HTMLImageElement>(res => {
       const img = new Image(); img.crossOrigin="anonymous";
       img.onload=()=>res(img); img.onerror=()=>res(img); img.src=src;
     });
+
+    const cs = getComputedStyle(document.documentElement);
+    const brice   = cs.getPropertyValue("--font-brice").trim()   || "serif";
+    const mundial = cs.getPropertyValue("--font-mundial").trim() || "sans-serif";
+
+    // ── Clip card shape ──
     ctx.save(); rr(0,0,W,H,18); ctx.clip();
-    // BG
-    const bg = ctx.createLinearGradient(0,0,W,H);
-    if(card.tier==="Legendary"){ bg.addColorStop(0,"#1a0e00"); bg.addColorStop(1,"#2c1c00"); }
-    else if(card.tier==="Rare"){ bg.addColorStop(0,"#0e0520"); bg.addColorStop(1,"#1c0a38"); }
-    else { bg.addColorStop(0,"#050508"); bg.addColorStop(1,"#0a0a18"); }
-    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-    // Portrait
-    const portrait = await loadImg(`/api/portrait/${card.tokenId}`);
-    if(portrait.naturalWidth>0){
-      const ph=H*0.55; ctx.save(); rr(0,0,W,ph,0); ctx.clip();
-      const sc=Math.max(W/portrait.naturalWidth, ph/portrait.naturalHeight);
-      ctx.drawImage(portrait,(W-portrait.naturalWidth*sc)/2,0,portrait.naturalWidth*sc,portrait.naturalHeight*sc);
-      ctx.restore();
+
+    // ── Background (dark, like on-screen) ──
+    ctx.fillStyle = "#080810"; ctx.fillRect(0,0,W,H);
+
+    // ── Portrait FULL BLEED ──
+    const portrait = await load(`/api/portrait/${card.tokenId}`);
+    if (portrait.naturalWidth > 0) {
+      const sc = Math.max(W/portrait.naturalWidth, H/portrait.naturalHeight);
+      ctx.drawImage(portrait, (W-portrait.naturalWidth*sc)/2, 0, portrait.naturalWidth*sc, portrait.naturalHeight*sc);
     }
-    const vg=ctx.createLinearGradient(0,H*0.34,0,H*0.58); vg.addColorStop(0,"rgba(5,5,8,0)"); vg.addColorStop(1,"rgba(5,5,8,0.97)");
-    ctx.fillStyle=vg; ctx.fillRect(0,H*0.34,W,H*0.24);
-    const cs=getComputedStyle(document.documentElement);
-    const brice=cs.getPropertyValue("--font-brice").trim()||"serif";
-    const mundial=cs.getPropertyValue("--font-mundial").trim()||"sans-serif";
-    ctx.font=`12px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.65)"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(`GVC #${card.tokenId}`,14,22);
-    const tw=ctx.measureText(card.tier.toUpperCase()).width+18;
-    rr(W-tw-12,10,tw,22,5); ctx.fillStyle=tc.border+"22"; ctx.fill(); ctx.strokeStyle=tc.border; ctx.lineWidth=1; ctx.stroke();
-    ctx.font=`bold 11px ${brice}`; ctx.fillStyle=tc.border; ctx.textAlign="right"; ctx.fillText(card.tier.toUpperCase(),W-14,21);
-    const shaka=await loadImg("/shaka.png"); if(shaka.naturalWidth>0) ctx.drawImage(shaka,14,H*0.575,22,22);
-    ctx.font=`bold 20px ${brice}`; ctx.fillStyle=tc.border; ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-    ctx.shadowColor=tc.border; ctx.shadowBlur=14; ctx.fillText(card.archetype.toUpperCase(),42,H*0.595); ctx.shadowBlur=0;
-    // Badges
-    const BY=H*0.615;
+
+    // ── Top gradient (darkens top so HUD is readable) ──
+    const topGrad = ctx.createLinearGradient(0,0,0,H*0.18);
+    topGrad.addColorStop(0,"rgba(0,0,0,0.72)"); topGrad.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=topGrad; ctx.fillRect(0,0,W,H*0.18);
+
+    // ── Bottom glass overlay (matches on-screen gradient) ──
+    const botGrad = ctx.createLinearGradient(0, H*0.44, 0, H);
+    botGrad.addColorStop(0,"rgba(5,5,10,0)");
+    botGrad.addColorStop(0.3,"rgba(5,5,10,0.55)");
+    botGrad.addColorStop(0.6,"rgba(5,5,10,0.92)");
+    botGrad.addColorStop(1,"rgba(5,5,10,0.98)");
+    ctx.fillStyle=botGrad; ctx.fillRect(0,H*0.44,W,H*0.56);
+
+    // ── Top HUD: token ID left, tier badge right ──
+    const PAD = 16;
+    ctx.font=`12px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.8)"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(`GVC #${card.tokenId}`, PAD, 22);
+    const tierTxt = card.tier.toUpperCase();
+    ctx.font=`bold 11px ${brice}`;
+    const tierW = ctx.measureText(tierTxt).width + 18;
+    rr(W-tierW-10, 10, tierW, 22, 5); ctx.fillStyle=tc.border+"28"; ctx.fill(); ctx.strokeStyle=tc.border; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=tc.border; ctx.textAlign="right"; ctx.fillText(tierTxt, W-12, 21);
+
+    // ── Bottom content starts at ~62% down ──
+    const BOT = H*0.62;
+
+    // Shaka + archetype
+    const shaka = await load("/shaka.png");
+    const SK = 22;
+    if (shaka.naturalWidth > 0) ctx.drawImage(shaka, PAD, BOT, SK, SK);
+    ctx.font=`bold 21px ${brice}`; ctx.fillStyle=tc.border;
+    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+    ctx.shadowColor=tc.border; ctx.shadowBlur=16;
+    ctx.fillText(card.archetype.toUpperCase(), PAD+SK+6, BOT+17);
+    ctx.shadowBlur=0;
+
+    // Badges — clean, no borders
+    const BD = 32, BG = 6;
+    const BY = BOT + 28;
     await Promise.allSettled(badges.slice(0,5).map(async(b,i)=>{
-      const bi=await loadImg(`https://goodvibesclub.ai/badges/${b}.webp`);
-      if(bi.naturalWidth>0){ const bx=14+i*40,by=BY; ctx.save(); rr(bx,by,34,34,6); ctx.clip(); ctx.drawImage(bi,bx,by,34,34); ctx.restore(); }
+      const bi = await load(`https://goodvibesclub.ai/badges/${b}.webp`);
+      if (bi.naturalWidth>0) {
+        ctx.save(); rr(PAD+i*(BD+BG), BY, BD, BD, 6); ctx.clip();
+        ctx.drawImage(bi, PAD+i*(BD+BG), BY, BD, BD); ctx.restore();
+      }
     }));
-    const statLabels=["RARITY","DRIP","ENERGY","AURA"] as const;
-    const statVals=[card.rarity,card.drip,card.energy,card.aura];
-    const statCols=["#ff6b8a","#74d7f7","#98f5c4","#c084fc"];
-    const SY=H*0.73,SH=46,SW=(W-28-5*3)/4;
-    statLabels.forEach((lbl,i)=>{
-      const sx=14+i*(SW+5); rr(sx,SY,SW,SH,7); ctx.fillStyle=statCols[i]+"18"; ctx.fill(); ctx.strokeStyle=statCols[i]+"55"; ctx.lineWidth=1; ctx.stroke();
-      ctx.font=`9px ${mundial}`; ctx.fillStyle=statCols[i]+"aa"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl,sx+SW/2,SY+13);
-      ctx.font=`bold 22px ${brice}`; ctx.fillStyle=statCols[i];
-      if(statVals[i]>=80){ctx.shadowColor=statCols[i];ctx.shadowBlur=10;} ctx.fillText(String(statVals[i]),sx+SW/2,SY+32); ctx.shadowBlur=0;
+
+    // Stats — clean labels above, big bold numbers, no boxes
+    const STAT_Y = BY + BD + 14;
+    const statW = (W - PAD*2 - 3*8) / 4;
+    const statLabels = ["RARITY","DRIP","ENERGY","AURA"] as const;
+    const statVals   = [card.rarity, card.drip, card.energy, card.aura];
+    statLabels.forEach((lbl, i) => {
+      const sx = PAD + i*(statW+8) + statW/2;
+      ctx.font=`9px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.38)";
+      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl, sx, STAT_Y+6);
+      ctx.font=`bold 26px ${brice}`; ctx.fillStyle=statCols[i];
+      if(statVals[i]>=80){ ctx.shadowColor=statCols[i]; ctx.shadowBlur=12; }
+      ctx.textBaseline="alphabetic"; ctx.fillText(String(statVals[i]), sx, STAT_Y+34);
+      ctx.shadowBlur=0;
     });
-    ctx.font=`9px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.22)"; ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(`TOTAL ${card.total}  ·  GVC VIBE BATTLE`,W/2,H-10);
-    ctx.restore(); rr(1,1,W-2,H-2,17); ctx.strokeStyle=tc.border; ctx.lineWidth=2.5; ctx.stroke();
-    const a=document.createElement("a"); a.download=`vibe-card-${card.tokenId}.png`; a.href=cv.toDataURL("image/png"); a.click();
+
+    // Total footer
+    ctx.font=`10px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.2)";
+    ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    ctx.fillText(`TOTAL ${card.total}  ·  GVC VIBE CARD`, W/2, H-10);
+
+    ctx.restore(); // pop clip
+
+    // ── Tier border ──
+    rr(1,1,W-2,H-2,17); ctx.strokeStyle=tc.border; ctx.lineWidth=2.5; ctx.stroke();
+
+    const a = document.createElement("a"); a.download=`vibe-card-${card.tokenId}.png`; a.href=cv.toDataURL("image/png"); a.click();
   } catch(e){ console.error("Download failed",e); }
 }
 
@@ -1187,8 +1234,15 @@ function PackRipScreen({
   return (
     <div style={{
       minHeight: "100vh", position: "relative", overflow: "hidden",
-      background: "rgba(15,15,30,0.97)",
+      background: "rgba(10,8,20,0.97)",
     }}>
+      {/* Pack rip background image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/GVC Pack Rip.png" alt="" aria-hidden style={{
+        position: "fixed", inset: 0, width: "100%", height: "100%",
+        objectFit: "cover", objectPosition: "center",
+        opacity: 0.18, pointerEvents: "none", zIndex: 0,
+      }}/>
       <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 64px", maxWidth: 520, margin: "0 auto" }}>
         {/* Back */}
         <motion.button
@@ -1386,26 +1440,9 @@ function BattleSetupScreen({
   const [activeSlot, setActiveSlot] = useState<{ player: 1 | 2; idx: number } | null>(null);
   const [slotInput, setSlotInput] = useState("");
 
-  const [scanPhase, setScanPhase] = useState<"idle"|"scanning"|"found">("idle");
-  const [onlineCount] = useState(() => 18 + Math.floor(Math.random() * 35));
-
   const p1Complete = p1Slots.every(c => c !== null);
   const p2Complete = p2Slots.every(c => c !== null);
-  const canStart = p1Complete && (
-    mode === "VS_CPU" ? true :
-    mode === "ONLINE" ? scanPhase === "found" :
-    p2Complete
-  );
-
-  useEffect(() => {
-    if (mode === "ONLINE" && p1Complete) {
-      setScanPhase("scanning");
-      const t = setTimeout(() => setScanPhase("found"), 3200);
-      return () => clearTimeout(t);
-    } else {
-      setScanPhase("idle");
-    }
-  }, [mode, p1Complete]);
+  const canStart = p1Complete && (mode === "VS_CPU" || p2Complete);
 
   const fillSlot = (player: 1 | 2, idx: number, card: BattleCard) => {
     if (player === 1) {
@@ -1451,9 +1488,8 @@ function BattleSetupScreen({
     if (!canStart) return;
     sfxClick();
     const p1 = p1Slots.filter(Boolean) as BattleCard[];
-    const p2 = (mode === "VS_CPU" || mode === "ONLINE") ? generateCpuDeck() : (p2Slots.filter(Boolean) as BattleCard[]);
-    const resolvedMode: BattleMode = mode === "ONLINE" ? "VS_CPU" : mode;
-    onStart(p1, p2, resolvedMode);
+    const p2 = mode === "VS_CPU" ? generateCpuDeck() : (p2Slots.filter(Boolean) as BattleCard[]);
+    onStart(p1, p2, mode);
   };
 
   const renderSlots = (player: 1 | 2, slots: (BattleCard | null)[]) => (
@@ -1522,66 +1558,19 @@ function BattleSetupScreen({
         </motion.h2>
 
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
           {([
-            { m: "VS_CPU"       as BattleMode, label: "VS CPU 🤖",      grad: "linear-gradient(135deg,#c084fc,#74d7f7)" },
-            { m: "PASS_AND_PLAY"as BattleMode, label: "PASS & PLAY 👥", grad: "linear-gradient(135deg,#ff6b8a,#ffb347)" },
-            { m: "ONLINE"       as BattleMode, label: "ONLINE 🌐",       grad: "linear-gradient(135deg,#98f5c4,#74d7f7)" },
+            { m: "VS_CPU"        as BattleMode, label: "VS CPU 🤖",      grad: "linear-gradient(135deg,#c084fc,#74d7f7)" },
+            { m: "PASS_AND_PLAY" as BattleMode, label: "PASS & PLAY 👥", grad: "linear-gradient(135deg,#ff6b8a,#ffb347)" },
           ]).map(({ m, label, grad }) => (
             <motion.button key={m} onClick={() => { sfxClick(); setMode(m); }} whileTap={{ scale:0.93 }}
-              style={{ padding:"9px 16px",borderRadius:20,border:mode===m?"none":"1px solid rgba(255,255,255,0.18)",
+              style={{ padding:"10px 20px",borderRadius:20,border:mode===m?"none":"1px solid rgba(255,255,255,0.2)",
                 background:mode===m?grad:"transparent",color:mode===m?"#0f0f1e":"rgba(255,255,255,0.5)",
-                fontFamily:"var(--font-brice)",fontSize:12,fontWeight:900,cursor:"pointer",letterSpacing:"0.04em" }}>
+                fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,cursor:"pointer",letterSpacing:"0.04em" }}>
               {label}
             </motion.button>
           ))}
         </div>
-
-        {/* Online scanning panel */}
-        <AnimatePresence>
-          {mode === "ONLINE" && (
-            <motion.div initial={{ opacity:0,height:0 }} animate={{ opacity:1,height:"auto" }} exit={{ opacity:0,height:0 }}
-              style={{ overflow:"hidden",marginBottom:20 }}>
-              <div style={{ background:"rgba(152,245,196,0.06)",border:"1px solid rgba(152,245,196,0.25)",borderRadius:14,padding:"16px",textAlign:"center" }}>
-                <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(152,245,196,0.6)",margin:"0 0 10px",letterSpacing:"0.1em",textTransform:"uppercase" }}>
-                  {onlineCount} PLAYERS ONLINE
-                </p>
-                {scanPhase === "scanning" && (
-                  <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
-                    {/* Radar rings */}
-                    <div style={{ position:"relative",width:60,height:60,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                      {[0,1,2].map(i=>(
-                        <motion.div key={i} style={{ position:"absolute",borderRadius:"50%",border:"1.5px solid rgba(152,245,196,0.6)",width:20+i*16,height:20+i*16 }}
-                          animate={{ scale:[1,1.4,1],opacity:[0.8,0.1,0.8] }}
-                          transition={{ duration:1.8,delay:i*0.45,repeat:Infinity,ease:"easeInOut" }}/>
-                      ))}
-                      <div style={{ width:10,height:10,borderRadius:"50%",background:"#98f5c4",boxShadow:"0 0 12px #98f5c4" }}/>
-                    </div>
-                    <p style={{ fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,color:"#98f5c4",margin:0,letterSpacing:"0.08em" }}>
-                      SEARCHING FOR OPPONENT…
-                    </p>
-                    {!p1Complete && (
-                      <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.35)",margin:0 }}>
-                        Fill your deck first!
-                      </p>
-                    )}
-                  </div>
-                )}
-                {scanPhase === "found" && (
-                  <motion.div initial={{ scale:0.8,opacity:0 }} animate={{ scale:1,opacity:1 }} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:6 }}>
-                    <motion.div animate={{ rotate:[0,5,-5,0] }} transition={{ duration:0.4 }} style={{ fontSize:28 }}>🎮</motion.div>
-                    <p style={{ fontFamily:"var(--font-brice)",fontSize:16,fontWeight:900,color:"#98f5c4",margin:0,letterSpacing:"0.06em" }}>
-                      OPPONENT FOUND!
-                    </p>
-                    <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.45)",margin:0 }}>
-                      GVC Challenger ready — press Let's Battle!
-                    </p>
-                  </motion.div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* P1 Deck */}
         <div style={{ marginBottom: 24 }}>
@@ -1713,7 +1702,7 @@ function BattleSetupScreen({
             transition: "all 0.2s",
           }}
         >
-          {canStart ? "LET'S BATTLE ⚔️" : mode === "ONLINE" ? (p1Complete ? "Searching…" : "Fill your deck first") : `Fill all ${mode === "VS_CPU" ? "5" : "10"} slots`}
+          {canStart ? "LET'S BATTLE ⚔️" : `Fill all ${mode === "VS_CPU" ? "5" : "10"} slots to start`}
         </motion.button>
 
         {!p1Complete && (
