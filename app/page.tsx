@@ -1141,12 +1141,17 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
 // ─── SCREEN 1: HOME ───────────────────────────────────────────────────────────
 
 function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: () => void }) {
-  const [floorEth, setFloorEth] = useState<number | null>(null);
+  const [floorEth, setFloorEth]   = useState<number | null>(null);
+  const [vol24h,   setVol24h]     = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("https://api-hazel-pi-72.vercel.app/api/stats")
+    // cache: no-store prevents the browser returning a stale cached response
+    fetch("https://api-hazel-pi-72.vercel.app/api/stats", { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { if (typeof d.floorPrice === "number") setFloorEth(d.floorPrice); })
+      .then(d => {
+        if (typeof d.floorPrice  === "number") setFloorEth(d.floorPrice);
+        if (typeof d.volume24h   === "number") setVol24h(d.volume24h);
+      })
       .catch(() => {});
   }, []);
 
@@ -1207,16 +1212,22 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
           Your GVC. Your Stats. Your Glory.
         </motion.p>
 
-        {/* Floor price pill */}
+        {/* Live stats pills — only render after fresh API data arrives */}
         <AnimatePresence>
-          {floorEth !== null && (
+          {(floorEth !== null || vol24h !== null) && (
             <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.18 }}
-              style={{ marginTop:14 }}>
-              <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(116,215,247,0.12)",border:"1px solid rgba(116,215,247,0.3)",borderRadius:20,padding:"5px 14px",fontFamily:"var(--font-mundial)",fontSize:13,color:C.sky,letterSpacing:"0.04em" }}>
-                {/* Ethereum diamond */}
-                <svg width="10" height="16" viewBox="0 0 10 16" fill={C.sky}><polygon points="5,0 10,8 5,16 0,8"/><polygon points="5,0 10,8 5,10 0,8" opacity="0.6"/></svg>
-                {floorEth.toFixed(3)} ETH Floor
-              </div>
+              style={{ display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:14 }}>
+              {floorEth !== null && (
+                <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(116,215,247,0.12)",border:"1px solid rgba(116,215,247,0.3)",borderRadius:20,padding:"5px 14px",fontFamily:"var(--font-mundial)",fontSize:13,color:C.sky,letterSpacing:"0.04em" }}>
+                  <svg width="9" height="14" viewBox="0 0 10 16" fill={C.sky}><polygon points="5,0 10,8 5,16 0,8"/><polygon points="5,0 10,8 5,10 0,8" opacity="0.55"/></svg>
+                  {floorEth.toFixed(3)} ETH Floor
+                </div>
+              )}
+              {vol24h !== null && (
+                <div style={{ display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,179,71,0.12)",border:"1px solid rgba(255,179,71,0.3)",borderRadius:20,padding:"5px 14px",fontFamily:"var(--font-mundial)",fontSize:13,color:C.peach,letterSpacing:"0.04em" }}>
+                  📈 {vol24h.toFixed(2)} ETH 24h Vol
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
