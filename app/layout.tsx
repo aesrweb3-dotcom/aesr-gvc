@@ -24,12 +24,29 @@ const mundial = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "aesr-gvc",
-  description: "Made using the GVC Builder Kit",
+  title: "VIBE BATTLE — GVC Card Game",
+  description: "Collect, battle and flex your GVC NFT trading cards. Rip packs, build a deck, and battle for glory. Built for the GVC Vibeathon by @imaesr.",
   icons: {
     icon: "/shaka.png",
     apple: "/shaka.png",
   },
+  manifest: "/manifest.json",
+  openGraph: {
+    title: "VIBE BATTLE — GVC Card Game 🤙",
+    description: "Rip packs · Build a deck · Battle for glory. The GVC NFT trading card game.",
+    url: "https://aesr-gvc.vercel.app",
+    siteName: "VIBE BATTLE",
+    images: [{ url: "https://aesr-gvc.vercel.app/GVC Card Battle.png", width: 1200, height: 630, alt: "VIBE BATTLE — GVC Card Game" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "VIBE BATTLE — GVC Card Game 🤙",
+    description: "Rip packs · Build a deck · Battle for glory. The GVC NFT trading card game.",
+    images: ["https://aesr-gvc.vercel.app/GVC Card Battle.png"],
+    creator: "@imaesr",
+  },
+  themeColor: "#c084fc",
 };
 
 export default function RootLayout({

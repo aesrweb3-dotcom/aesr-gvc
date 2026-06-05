@@ -1,0 +1,13 @@
+{
+  "name": "VIBE BATTLE — GVC Card Game",
+  "short_name": "VibeBattle",
+  "description": "Collect, battle and flex your GVC NFT trading cards. Built for the GVC Vibeathon.",
+  "theme_color": "#c084fc",
+  "background_color": "#0f0f1e",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    { "src": "/shaka.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -39,6 +39,36 @@ const STAT_COLORS: Record<RoundStat, string> = {
   TOTAL:  C.sunshine,
 };
 
+// ─── STATS (localStorage) ────────────────────────────────────────────────────
+
+interface VibStats { wins:number; losses:number; draws:number; packs:number; streak:number; }
+const DEFAULT_STATS: VibStats = { wins:0, losses:0, draws:0, packs:0, streak:0 };
+
+function loadStats(): VibStats {
+  if (typeof window === "undefined") return DEFAULT_STATS;
+  try { return { ...DEFAULT_STATS, ...JSON.parse(localStorage.getItem("vb-stats") || "{}") }; }
+  catch { return DEFAULT_STATS; }
+}
+function saveStats(s: VibStats) {
+  try { localStorage.setItem("vb-stats", JSON.stringify(s)); } catch {}
+}
+function recordBattleResult(winner: "P1"|"P2"|"DRAW") {
+  const s = loadStats();
+  if (winner === "P1")   saveStats({...s, wins:   s.wins+1,   streak: s.streak+1});
+  else if (winner==="P2") saveStats({...s, losses: s.losses+1, streak: 0});
+  else                    saveStats({...s, draws:  s.draws+1});
+}
+function recordPack() {
+  const s = loadStats(); saveStats({...s, packs: s.packs+1});
+}
+
+// ─── TOP CARDS (pre-calculated once at module load, instant pure math) ───────
+
+const TOP_CARDS: BattleCard[] = (() => {
+  const all = Array.from({ length: 6969 }, (_, i) => generateBattleCard(i));
+  return all.sort((a, b) => b.total - a.total).slice(0, 10);
+})();
+
 // ─── CSS ANIMATIONS ───────────────────────────────────────────────────────────
 
 const GAME_CSS = `
@@ -1117,7 +1147,26 @@ function PacketReveal({ onOpened }: { onOpened: () => void }) {
 
 // ─── SCREEN 1: HOME ───────────────────────────────────────────────────────────
 
-function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: () => void }) {
+function HomeScreen({ onPackRip, onBattle, onQuickBattle }: {
+  onPackRip: () => void;
+  onBattle: () => void;
+  onQuickBattle: () => void;
+}) {
+  const [gvcStats, setGvcStats] = useState<{floor?:number;owners?:number;vol24h?:number}|null>(null);
+  const [myStats,  setMyStats]  = useState<VibStats>(() => loadStats());
+  const [showTop,  setShowTop]  = useState(false);
+
+  useEffect(() => {
+    fetch("https://api-hazel-pi-72.vercel.app/api/stats")
+      .then(r => r.json())
+      .then(d => setGvcStats({ floor: d.floorPrice, owners: d.numOwners, vol24h: d.volume24h }))
+      .catch(() => {});
+    // refresh local stats each time home is shown
+    setMyStats(loadStats());
+  }, []);
+
+  const totalBattles = myStats.wins + myStats.losses + myStats.draws;
+
   return (
     <div className="vb-bg" style={{ minHeight: "100vh", position: "relative", overflow: "hidden" }}>
       <FloatingCards />
@@ -1175,55 +1224,106 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
           Your GVC. Your Stats. Your Glory.
         </motion.p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.22 }}
-          style={{ marginTop: 40, display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}
-        >
-          <motion.button
-            onClick={() => { sfxClick(); onPackRip(); }}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.04 }}
-            style={{
-              background: "linear-gradient(135deg, #ff6b8a, #ffb347)",
-              color: "#0f0f1e",
-              fontFamily: "var(--font-brice)",
-              fontSize: 20, fontWeight: 900,
-              padding: "16px 32px", borderRadius: 16,
-              border: "none", letterSpacing: "0.04em",
-              boxShadow: "0 8px 32px rgba(255,107,138,0.45)",
-              cursor: "pointer",
-            }}
-          >
+        {/* Live GVC stats ticker */}
+        <AnimatePresence>
+          {gvcStats && (
+            <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.18 }}
+              style={{ display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center",marginTop:16 }}>
+              {[
+                { label:`💎 ${gvcStats.floor?.toFixed(3)}Ξ Floor`,  fg:C.sky,      bg:"rgba(116,215,247,0.12)", border:"rgba(116,215,247,0.3)" },
+                { label:`👥 ${gvcStats.owners?.toLocaleString()} Holders`, fg:C.mint, bg:"rgba(152,245,196,0.12)", border:"rgba(152,245,196,0.3)" },
+                { label:`📈 ${gvcStats.vol24h?.toFixed(2)}Ξ 24h`,  fg:C.peach,    bg:"rgba(255,179,71,0.12)",  border:"rgba(255,179,71,0.3)" },
+              ].map(s=>(
+                <div key={s.label} style={{ background:s.bg,border:`1px solid ${s.border}`,borderRadius:20,padding:"5px 12px",fontFamily:"var(--font-mundial)",fontSize:12,color:s.fg,letterSpacing:"0.04em" }}>
+                  {s.label}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Personal stats strip */}
+        <AnimatePresence>
+          {totalBattles > 0 && (
+            <motion.div initial={{ opacity:0,scale:0.9 }} animate={{ opacity:1,scale:1 }} transition={{ delay:0.25 }}
+              style={{ display:"flex",gap:8,alignItems:"center",justifyContent:"center",marginTop:12,flexWrap:"wrap" }}>
+              {myStats.streak >= 2 && (
+                <div style={{ background:"rgba(255,107,138,0.15)",border:"1px solid rgba(255,107,138,0.4)",borderRadius:20,padding:"4px 12px",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,color:C.coral }}>
+                  🔥 {myStats.streak} Win Streak!
+                </div>
+              )}
+              <div style={{ background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:20,padding:"4px 12px",fontFamily:"var(--font-mundial)",fontSize:12,color:"rgba(255,255,255,0.55)" }}>
+                ⚔️ {myStats.wins}W · {myStats.losses}L{myStats.draws>0?` · ${myStats.draws}D`:""}
+              </div>
+              {myStats.packs > 0 && (
+                <div style={{ background:"rgba(192,132,252,0.12)",border:"1px solid rgba(192,132,252,0.3)",borderRadius:20,padding:"4px 12px",fontFamily:"var(--font-mundial)",fontSize:12,color:C.lavender }}>
+                  🎴 {myStats.packs} Packs
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Main buttons */}
+        <motion.div initial={{ opacity:0,y:24 }} animate={{ opacity:1,y:0 }} transition={{ duration:0.5,delay:0.22 }}
+          style={{ marginTop:32,display:"flex",gap:14,flexWrap:"wrap",justifyContent:"center" }}>
+          <motion.button onClick={() => { sfxClick(); onPackRip(); }} whileTap={{ scale:0.95 }} whileHover={{ scale:1.04 }}
+            style={{ background:"linear-gradient(135deg,#ff6b8a,#ffb347)",color:"#0f0f1e",fontFamily:"var(--font-brice)",fontSize:18,fontWeight:900,padding:"15px 28px",borderRadius:16,border:"none",letterSpacing:"0.04em",boxShadow:"0 8px 32px rgba(255,107,138,0.45)",cursor:"pointer" }}>
             🎴 RIP A PACK
           </motion.button>
-
-          <motion.button
-            onClick={() => { sfxClick(); onBattle(); }}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.04 }}
-            style={{
-              background: "linear-gradient(135deg, #c084fc, #74d7f7)",
-              color: "#0f0f1e",
-              fontFamily: "var(--font-brice)",
-              fontSize: 20, fontWeight: 900,
-              padding: "16px 32px", borderRadius: 16,
-              border: "none", letterSpacing: "0.04em",
-              boxShadow: "0 8px 32px rgba(192,132,252,0.45)",
-              cursor: "pointer",
-            }}
-          >
+          <motion.button onClick={() => { sfxClick(); onBattle(); }} whileTap={{ scale:0.95 }} whileHover={{ scale:1.04 }}
+            style={{ background:"linear-gradient(135deg,#c084fc,#74d7f7)",color:"#0f0f1e",fontFamily:"var(--font-brice)",fontSize:18,fontWeight:900,padding:"15px 28px",borderRadius:16,border:"none",letterSpacing:"0.04em",boxShadow:"0 8px 32px rgba(192,132,252,0.45)",cursor:"pointer" }}>
             ⚔️ BATTLE
           </motion.button>
         </motion.div>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          style={{ marginTop: 48, fontSize: 12, color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-mundial)" }}
-        >
+        {/* ⚡ Quick Battle — skips deck building entirely */}
+        <motion.div initial={{ opacity:0,y:16 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.32 }} style={{ marginTop:12,width:"100%",maxWidth:380 }}>
+          <motion.button onClick={() => { sfxClick(); onQuickBattle(); }} whileTap={{ scale:0.95 }} whileHover={{ scale:1.02 }}
+            style={{ width:"100%",padding:"13px",background:"linear-gradient(135deg,#FFE048,#ff9b6b,#ff6b8a)",color:"#0f0f1e",fontFamily:"var(--font-brice)",fontSize:17,fontWeight:900,borderRadius:14,border:"none",letterSpacing:"0.04em",boxShadow:"0 6px 28px rgba(255,224,72,0.4)",cursor:"pointer" }}>
+            ⚡ QUICK BATTLE — 5 Random Cards
+          </motion.button>
+          <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.25)",margin:"5px 0 0",letterSpacing:"0.04em" }}>
+            Instant · No setup needed
+          </p>
+        </motion.div>
+
+        {/* 🏆 Top Cards Leaderboard */}
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.45 }}
+          style={{ marginTop:28,width:"100%",maxWidth:480 }}>
+          <motion.button onClick={() => setShowTop(v=>!v)} whileTap={{ scale:0.97 }}
+            style={{ background:"rgba(255,224,72,0.08)",border:"1px solid rgba(255,224,72,0.25)",borderRadius:12,padding:"9px 20px",fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,color:C.sunshine,cursor:"pointer",letterSpacing:"0.06em",width:"100%" }}>
+            🏆 LEGENDARY HALL OF FAME {showTop?"▲":"▼"}
+          </motion.button>
+          <AnimatePresence>
+            {showTop && (
+              <motion.div initial={{ opacity:0,height:0 }} animate={{ opacity:1,height:"auto" }} exit={{ opacity:0,height:0 }}
+                style={{ overflow:"hidden" }}>
+                <div style={{ paddingTop:12,display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch" as React.CSSProperties["WebkitOverflowScrolling"] }}>
+                  {TOP_CARDS.map((card,i) => (
+                    <div key={card.tokenId} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0 }}>
+                      <div style={{ position:"relative" }}>
+                        <BattleCardMini card={card} disabled />
+                        <div style={{ position:"absolute",top:-6,left:-6,width:20,height:20,borderRadius:"50%",background:i<3?"linear-gradient(135deg,#FFE048,#ff9b6b)":"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-brice)",fontSize:9,fontWeight:900,color:i<3?"#0f0f1e":"rgba(255,255,255,0.4)" }}>
+                          {i+1}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily:"var(--font-brice)",fontSize:10,fontWeight:900,color:C.sunshine }}>
+                        {card.total}
+                      </div>
+                      <div style={{ fontFamily:"var(--font-mundial)",fontSize:9,color:"rgba(255,255,255,0.35)" }}>
+                        #{card.tokenId}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.6 }}
+          style={{ marginTop:28,fontSize:12,color:"rgba(255,255,255,0.25)",fontFamily:"var(--font-mundial)" }}>
           Built by @imaesr for the GVC Vibeathon 🤙
         </motion.p>
       </div>
@@ -1273,6 +1373,7 @@ function PackRipScreen({
     setPackRevealed(true);
     setShowBurst(true);
     setTimeout(() => setShowBurst(false), 2000);
+    recordPack(); // track packs ripped
   }, []);
 
   return (
@@ -1621,10 +1722,33 @@ function BattleSetupScreen({
 
         {/* P1 Deck */}
         <div style={{ marginBottom: 24 }}>
-          <p style={{ fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
-            color: C.sky, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            YOUR DECK ({p1Slots.filter(Boolean).length}/5)
-          </p>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8 }}>
+            <p style={{ fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,color:C.sky,margin:0,textTransform:"uppercase",letterSpacing:"0.08em" }}>
+              YOUR DECK ({p1Slots.filter(Boolean).length}/5)
+            </p>
+            <div style={{ display:"flex",gap:8 }}>
+              <motion.button
+                onClick={() => {
+                  sfxClick();
+                  const ids = new Set<number>();
+                  while(ids.size < 5) ids.add(Math.floor(Math.random()*6969));
+                  setP1Slots([...ids].map(id => generateBattleCard(id)));
+                  setActiveSlot(null);
+                }}
+                whileTap={{ scale:0.93 }}
+                style={{ padding:"6px 14px",background:"linear-gradient(135deg,#FFE048,#ff9b6b)",color:"#0f0f1e",border:"none",borderRadius:10,fontFamily:"var(--font-brice)",fontSize:12,fontWeight:900,cursor:"pointer",letterSpacing:"0.04em" }}>
+                ⚡ Fill 5 Random
+              </motion.button>
+              {p1Slots.some(Boolean) && (
+                <motion.button
+                  onClick={() => { sfxClick(); setP1Slots(Array(5).fill(null)); setActiveSlot(null); }}
+                  whileTap={{ scale:0.93 }}
+                  style={{ padding:"6px 12px",background:"rgba(255,107,138,0.1)",border:"1px solid rgba(255,107,138,0.3)",borderRadius:10,fontFamily:"var(--font-mundial)",fontSize:11,color:C.coral,cursor:"pointer" }}>
+                  Clear
+                </motion.button>
+              )}
+            </div>
+          </div>
           {renderSlots(1, p1Slots)}
         </div>
 
@@ -1805,6 +1929,8 @@ function BattleArenaScreen({
     setShaking(true);
     setTimeout(() => setShaking(false), 380);
     sfxClash();
+    // Haptic feedback on supported devices
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([80,30,80]);
     if (result === "P1") sfxRoundWin();
     else if (result === "P2") sfxRoundLose();
     setRoundWinner(result);
@@ -2184,6 +2310,9 @@ function VictoryScreen({
   const won  = result.winner === "P1";
   const drew = result.winner === "DRAW";
   const bestCard = result.p1BestCard ?? (p1Deck.length > 0 ? [...p1Deck].sort((a, b) => b.total - a.total)[0] : null);
+
+  // Record win/loss/draw once on mount
+  useEffect(() => { recordBattleResult(result.winner); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shareToX = () => {
     const tokenId = bestCard?.tokenId ?? 0;
@@ -2567,6 +2696,16 @@ export default function Page() {
   const [battleMode,   setBattleMode]   = useState<BattleMode>("VS_CPU");
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
 
+  const handleQuickBattle = useCallback(() => {
+    sfxClick();
+    const ids = new Set<number>();
+    while (ids.size < 5) ids.add(Math.floor(Math.random() * 6969));
+    setP1Deck([...ids].map(id => generateBattleCard(id)));
+    setP2Deck(generateCpuDeck());
+    setBattleMode("VS_CPU");
+    setScreen("BATTLE_ARENA");
+  }, []);
+
   return (
     <>
       <style>{GAME_CSS}</style>
@@ -2579,6 +2718,7 @@ export default function Page() {
             <HomeScreen
               onPackRip={() => setScreen("PACK_RIP")}
               onBattle={() => setScreen("BATTLE_SETUP")}
+              onQuickBattle={handleQuickBattle}
             />
           </motion.div>
         )}
