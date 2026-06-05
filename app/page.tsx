@@ -691,7 +691,7 @@ async function downloadShowcaseCard(card: BattleCard, badges: string[]) {
     // Baselines/tops from bottom
     const totalBaseline  = H - PAD_BOT;
     const statsNumBase   = totalBaseline  - GAP - STAT_NUM_H;
-    const statsLblMid    = statsNumBase   - STAT_LBL_H - 2;
+    const statsLblMid    = statsNumBase   - STAT_NUM_H - GAP - STAT_LBL_H / 2;
     const badgeTop       = statsLblMid    - STAT_LBL_H/2 - GAP - BADGE_SZ;
     const archTop        = badgeTop       - GAP - ARCH_H;
     const archBaseline   = archTop + Math.round(ARCH_H * 0.82); // text baseline within row
