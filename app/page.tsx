@@ -1213,26 +1213,6 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
           Your GVC. Your Stats. Your Glory.
         </motion.p>
 
-        {/* Live stats pills — only render after fresh API data arrives */}
-        <AnimatePresence>
-          {(floorEth !== null || vol24h !== null) && (
-            <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.18 }}
-              style={{ display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:14 }}>
-              {floorEth !== null && (
-                <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(116,215,247,0.12)",border:"1px solid rgba(116,215,247,0.3)",borderRadius:20,padding:"5px 14px",fontFamily:"var(--font-mundial)",fontSize:13,color:C.sky,letterSpacing:"0.04em" }}>
-                  <svg width="9" height="14" viewBox="0 0 10 16" fill={C.sky}><polygon points="5,0 10,8 5,16 0,8"/><polygon points="5,0 10,8 5,10 0,8" opacity="0.55"/></svg>
-                  {floorEth.toFixed(3)} ETH Floor
-                </div>
-              )}
-              {vol24h !== null && (
-                <div style={{ display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,179,71,0.12)",border:"1px solid rgba(255,179,71,0.3)",borderRadius:20,padding:"5px 14px",fontFamily:"var(--font-mundial)",fontSize:13,color:C.peach,letterSpacing:"0.04em" }}>
-                  📈 {vol24h.toFixed(2)} ETH 24h Vol
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Main buttons */}
         <motion.div initial={{ opacity:0,y:24 }} animate={{ opacity:1,y:0 }} transition={{ duration:0.5,delay:0.22 }}
           style={{ marginTop:36,display:"flex",gap:14,flexWrap:"wrap",justifyContent:"center" }}>
@@ -1246,8 +1226,31 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
           </motion.button>
         </motion.div>
 
-        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.5 }}
-          style={{ marginTop:48,fontSize:12,color:"rgba(255,255,255,0.25)",fontFamily:"var(--font-mundial)" }}>
+        {/* Live market data — small, subtle, below buttons */}
+        <AnimatePresence>
+          {(floorEth !== null || vol24h !== null) && (
+            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.5 }}
+              style={{ display:"flex",gap:12,alignItems:"center",justifyContent:"center",marginTop:20,flexWrap:"wrap" }}>
+              {floorEth !== null && (
+                <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(116,215,247,0.55)",letterSpacing:"0.05em" }}>
+                  <svg width="7" height="11" viewBox="0 0 10 16" fill="rgba(116,215,247,0.55)"><polygon points="5,0 10,8 5,16 0,8"/><polygon points="5,0 10,8 5,10 0,8" opacity="0.5"/></svg>
+                  {floorEth.toFixed(3)} ETH Floor
+                </span>
+              )}
+              {floorEth !== null && vol24h !== null && (
+                <span style={{ color:"rgba(255,255,255,0.12)",fontSize:10 }}>·</span>
+              )}
+              {vol24h !== null && (
+                <span style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,179,71,0.55)",letterSpacing:"0.05em" }}>
+                  {vol24h.toFixed(2)} ETH 24h Vol
+                </span>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.6 }}
+          style={{ marginTop:32,fontSize:12,color:"rgba(255,255,255,0.25)",fontFamily:"var(--font-mundial)" }}>
           Built by @imaesr for the GVC Vibeathon 🤙
         </motion.p>
       </div>
