@@ -1735,10 +1735,33 @@ function BattleSetupScreen({
               exit={{ opacity: 0, height: 0 }}
               style={{ overflow: "hidden", marginBottom: 24 }}
             >
-              <p style={{ fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
-                color: C.coral, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                PLAYER 2 DECK ({p2Slots.filter(Boolean).length}/5)
-              </p>
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8 }}>
+                <p style={{ fontFamily:"var(--font-brice)",fontSize:14,fontWeight:900,color:C.coral,margin:0,textTransform:"uppercase",letterSpacing:"0.08em" }}>
+                  PLAYER 2 DECK ({p2Slots.filter(Boolean).length}/5)
+                </p>
+                <div style={{ display:"flex",gap:8 }}>
+                  <motion.button
+                    onClick={() => {
+                      sfxClick();
+                      const ids = new Set<number>();
+                      while(ids.size < 5) ids.add(Math.floor(Math.random()*6969));
+                      setP2Slots([...ids].map(id => generateBattleCard(id)));
+                      setActiveSlot(null);
+                    }}
+                    whileTap={{ scale:0.93 }}
+                    style={{ padding:"6px 14px",background:"linear-gradient(135deg,#FFE048,#ff9b6b)",color:"#0f0f1e",border:"none",borderRadius:10,fontFamily:"var(--font-brice)",fontSize:12,fontWeight:900,cursor:"pointer",letterSpacing:"0.04em" }}>
+                    ⚡ Fill 5 Random
+                  </motion.button>
+                  {p2Slots.some(Boolean) && (
+                    <motion.button
+                      onClick={() => { sfxClick(); setP2Slots(Array(5).fill(null)); setActiveSlot(null); }}
+                      whileTap={{ scale:0.93 }}
+                      style={{ padding:"6px 12px",background:"rgba(255,107,138,0.1)",border:"1px solid rgba(255,107,138,0.3)",borderRadius:10,fontFamily:"var(--font-mundial)",fontSize:11,color:C.coral,cursor:"pointer" }}>
+                      Clear
+                    </motion.button>
+                  )}
+                </div>
+              </div>
               {renderSlots(2, p2Slots)}
             </motion.div>
           )}
@@ -2609,7 +2632,7 @@ export default function Page() {
             <PackRipScreen
               onBattle={card => { setPackCard(card); setScreen("BATTLE_SETUP"); }}
               onRipAgain={() => setPackCard(null)}
-              onHome={() => setScreen("HOME")}
+              onHome={() => { setPackCard(null); setScreen("HOME"); }}
             />
           </motion.div>
         )}
@@ -2624,7 +2647,7 @@ export default function Page() {
                 setP1Deck(p1); setP2Deck(p2); setBattleMode(mode);
                 setScreen("BATTLE_ARENA");
               }}
-              onHome={() => setScreen("HOME")}
+              onHome={() => { setPackCard(null); setScreen("HOME"); }}
             />
           </motion.div>
         )}
@@ -2636,7 +2659,7 @@ export default function Page() {
             <BattleArenaScreen
               p1Deck={p1Deck} p2Deck={p2Deck} mode={battleMode}
               onEnd={result => { setBattleResult(result); setScreen("VICTORY"); }}
-              onHome={() => setScreen("HOME")}
+              onHome={() => { setPackCard(null); setScreen("HOME"); }}
             />
           </motion.div>
         )}
