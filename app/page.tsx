@@ -2424,8 +2424,10 @@ function VictoryScreen({
 // ─── MUSIC PLAYER ─────────────────────────────────────────────────────────────
 
 const TRACKS = [
+  { name: "GVC Rap",     path: "/sounds/GVC Rap.mp3"     },
   { name: "GVC Dance",   path: "/sounds/GVC Dance.mp3"   },
   { name: "GVC Country", path: "/sounds/GVC Country.mp3" },
+  { name: "GVC Metal",   path: "/sounds/GVC Metal.mp3"   },
 ];
 
 const BAR_COLS = ["#ff6b8a","#ff8c6b","#ffb347","#FFE048","#c8f560","#98f5c4","#6bffea","#74d7f7","#6baeff","#8a6bff","#c084fc","#e06bff","#ff6be0","#ff6bb5","#ff6b8a","#ff9b6b","#ffd06b","#98f5a4","#6bd7ff","#9a6bff"];
