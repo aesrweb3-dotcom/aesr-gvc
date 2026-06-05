@@ -1145,12 +1145,13 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
   const [vol24h,   setVol24h]     = useState<number | null>(null);
 
   useEffect(() => {
-    // cache: no-store prevents the browser returning a stale cached response
-    fetch("https://api-hazel-pi-72.vercel.app/api/stats", { cache: "no-store" })
+    // Timestamp busts any CDN / browser cache so we always get live data
+    fetch(`https://api-hazel-pi-72.vercel.app/api/stats?_=${Date.now()}`, { cache: "no-store" })
       .then(r => r.json())
       .then(d => {
-        if (typeof d.floorPrice  === "number") setFloorEth(d.floorPrice);
-        if (typeof d.volume24h   === "number") setVol24h(d.volume24h);
+        if (typeof d.floorPrice === "number" && d.floorPrice > 0) setFloorEth(d.floorPrice);
+        // Only show 24h vol when there were actual sales (> 0.001 ETH)
+        if (typeof d.volume24h  === "number" && d.volume24h  > 0.001) setVol24h(d.volume24h);
       })
       .catch(() => {});
   }, []);
