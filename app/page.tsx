@@ -446,30 +446,33 @@ interface BattleCardFullProps {
   winner?: boolean;
   loser?: boolean;
   faceDown?: boolean;
+  cardWidth?: number;
 }
 
-function BattleCardFull({ card, highlightStat, winner, loser, faceDown }: BattleCardFullProps) {
+function BattleCardFull({ card, highlightStat, winner, loser, faceDown, cardWidth = 155 }: BattleCardFullProps) {
   const [imgState, setImgState] = useState<"loading" | "loaded" | "error">("loading");
   const tc = TIER_COLORS[card.tier];
+  const CW = cardWidth;
+  const CH = Math.round(CW * (210/155));
 
   if (faceDown) {
     return (
       <div style={{
-        width: 155, height: 210, borderRadius: 14,
+        width: CW, height: CH, borderRadius: 14,
         background: "linear-gradient(135deg,#1a0340,#0a1a40,#0d1a2e)",
         border: `2px solid rgba(255,255,255,0.12)`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
         flexShrink: 0,
       }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: 40, height: 40, opacity: 0.6 }} />
+        <img src="/shaka.png" alt="" className="shaka-idle" style={{ width: CW*0.27, height: CW*0.27, opacity: 0.6 }} />
         <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mundial)", letterSpacing: "0.1em" }}>???</span>
       </div>
     );
   }
 
   const cardStyle: React.CSSProperties = {
-    width: 155, height: 210, borderRadius: 14, overflow: "hidden",
+    width: CW, height: CH, borderRadius: 14, overflow: "hidden",
     border: `2px solid ${winner ? C.mint : loser ? "rgba(255,255,255,0.15)" : tc.border}`,
     boxShadow: winner
       ? `0 0 24px rgba(152,245,196,0.7), 0 0 48px rgba(152,245,196,0.3)`
@@ -1122,7 +1125,7 @@ function HomeScreen({ onPackRip, onBattle }: { onPackRip: () => void; onBattle: 
         position: "relative", zIndex: 1,
         minHeight: "100vh",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "40px 20px",
+        padding: "40px 20px 90px",
         textAlign: "center",
       }}>
         <motion.div
@@ -1284,7 +1287,7 @@ function PackRipScreen({
         objectFit: "cover", objectPosition: "center",
         opacity: 0.18, pointerEvents: "none", zIndex: 0,
       }}/>
-      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 64px", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 90px", maxWidth: 520, margin: "0 auto" }}>
         {/* Back */}
         <motion.button
           onClick={() => { sfxClick(); onHome(); }}
@@ -1534,7 +1537,7 @@ function BattleSetupScreen({
   };
 
   const renderSlots = (player: 1 | 2, slots: (BattleCard | null)[]) => (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"] }}>
       {slots.map((card, idx) => {
         const isActive = activeSlot?.player === player && activeSlot?.idx === idx;
         if (card) {
@@ -1575,7 +1578,7 @@ function BattleSetupScreen({
       {/* Pre-battle background */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/GVC PreBattle.png" alt="" aria-hidden style={{ position:"fixed",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",opacity:0.18,pointerEvents:"none",zIndex:0 }}/>
-      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 80px", maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 90px", maxWidth: 600, margin: "0 auto" }}>
         {/* Back */}
         <motion.button
           onClick={() => { sfxClick(); onHome(); }}
@@ -1926,7 +1929,7 @@ function BattleArenaScreen({
         )}
       </AnimatePresence>
 
-      <div style={{ padding: "16px 16px 24px", maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ padding: "16px 16px 90px", maxWidth: 600, margin: "0 auto" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <motion.button
@@ -2049,65 +2052,57 @@ function BattleArenaScreen({
           </div>
         </motion.div>
 
-        {/* Arena center */}
-        <div className={shaking ? "arena-shake" : ""} style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          gap: 16, marginBottom: 12, minHeight: 240,
-        }}>
-          {/* P2 card */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>
-              {mode === "VS_CPU" ? "CPU" : "P2"}
+        {/* Arena center — responsive card width so it never overflows on mobile */}
+        {(() => {
+          const vw = typeof window !== "undefined" ? window.innerWidth : 600;
+          const available = Math.min(568, vw - 32); // container width minus padding
+          // two cards + gap(12) + VS(32) must fit
+          const arenaCard = Math.min(155, Math.floor((available - 12 - 32) / 2));
+          const arenaH    = Math.round(arenaCard * (210/155));
+          return (
+            <div className={shaking ? "arena-shake" : ""} style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 12, marginBottom: 12, minHeight: arenaH + 30,
+            }}>
+              {/* P2 card */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>
+                  {mode === "VS_CPU" ? "CPU" : "P2"}
+                </div>
+                {p2Played ? (
+                  <BattleCardFull
+                    card={p2Played} cardWidth={arenaCard}
+                    highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
+                    winner={roundWinner === "P2"}
+                    loser={roundWinner === "P1"}
+                  />
+                ) : (
+                  <div style={{ width:arenaCard,height:arenaH,borderRadius:14,border:"2px dashed rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.02)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <span style={{ color:"rgba(255,255,255,0.15)",fontSize:28 }}>?</span>
+                  </div>
+                )}
+              </div>
+              {/* VS */}
+              <div style={{ fontFamily:"var(--font-brice)",fontSize:20,fontWeight:900,color:"rgba(255,255,255,0.25)",flexShrink:0 }}>VS</div>
+              {/* P1 card */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>YOU</div>
+                {p1Played ? (
+                  <BattleCardFull
+                    card={p1Played} cardWidth={arenaCard}
+                    highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
+                    winner={roundWinner === "P1"}
+                    loser={roundWinner === "P2"}
+                  />
+                ) : (
+                  <div style={{ width:arenaCard,height:arenaH,borderRadius:14,border:"2px dashed rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.02)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <span style={{ color:"rgba(255,255,255,0.15)",fontSize:28 }}>?</span>
+                  </div>
+                )}
+              </div>
             </div>
-            {p2Played ? (
-              <BattleCardFull
-                card={p2Played}
-                highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
-                winner={roundWinner === "P2"}
-                loser={roundWinner === "P1"}
-              />
-            ) : (
-              <div style={{
-                width: 155, height: 210, borderRadius: 14,
-                border: "2px dashed rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.02)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 28 }}>?</span>
-              </div>
-            )}
-          </div>
-
-          {/* VS */}
-          <div style={{ textAlign: "center" }}>
-            <div style={{
-              fontFamily: "var(--font-brice)", fontSize: 24, fontWeight: 900,
-              color: "rgba(255,255,255,0.25)", lineHeight: 1,
-            }}>VS</div>
-          </div>
-
-          {/* P1 card */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mundial)", letterSpacing: "0.06em" }}>YOU</div>
-            {p1Played ? (
-              <BattleCardFull
-                card={p1Played}
-                highlightStat={phase === "RESULT" || phase === "REVEAL" ? currentStat : undefined}
-                winner={roundWinner === "P1"}
-                loser={roundWinner === "P2"}
-              />
-            ) : (
-              <div style={{
-                width: 155, height: 210, borderRadius: 14,
-                border: "2px dashed rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.02)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 28 }}>?</span>
-              </div>
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Round result message */}
         <AnimatePresence>
@@ -2216,7 +2211,7 @@ function VictoryScreen({
         position: "relative", zIndex: 1,
         minHeight: "100vh",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "40px 20px",
+        padding: "40px 20px 90px",
         textAlign: "center",
       }}>
         <motion.div
@@ -2428,11 +2423,11 @@ function MusicPlayer() {
     if (ctxRef.current) return ctxRef.current;
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
-    const gain = ctx.createGain(); gain.gain.value = volume;
+    const gain = ctx.createGain(); gain.gain.value = 0.7;
     analyser.connect(gain); gain.connect(ctx.destination);
     ctxRef.current = ctx; analyserRef.current = analyser; gainRef.current = gain;
     return ctx;
-  }, [volume]);
+  }, []); // stable — volume is controlled via gainRef directly, no need to recreate
 
   const tick = useCallback(() => {
     if (!analyserRef.current) return;
