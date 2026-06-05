@@ -1834,6 +1834,13 @@ function BattleArenaScreen({
       minHeight: "100vh", position: "relative", overflow: "hidden",
       background: bgColor, transition: "background 0.6s",
     }}>
+      {/* Battle background image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/GVC Card Battle.png" alt="" aria-hidden style={{
+        position: "fixed", inset: 0, width: "100%", height: "100%",
+        objectFit: "cover", objectPosition: "center",
+        opacity: 0.2, pointerEvents: "none", zIndex: 0,
+      }}/>
       {/* PASS TO P2 overlay */}
       <AnimatePresence>
         {phase === "PASS_TO_P2" && (
