@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   generateBattleCard, compareCards, generateCpuDeck, randomCard,
@@ -83,9 +83,14 @@ const GAME_CSS = `
   animation: gvc-spin 0.8s linear infinite;
 }
 .card-shimmer {
-  background: linear-gradient(108deg, transparent 38%, rgba(255,224,72,0.07) 50%, transparent 62%);
-  animation: card-shimmer 3.5s ease-in-out infinite;
+  background: linear-gradient(108deg, transparent 32%, rgba(180,180,255,0.14) 44%, rgba(255,180,200,0.10) 50%, rgba(180,255,200,0.14) 56%, transparent 68%);
+  animation: card-shimmer 3.8s ease-in-out infinite;
 }
+@keyframes rainbowLed { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+.rainbow-led { background:linear-gradient(90deg,#ff6b8a,#ffb347,#FFE048,#98f5c4,#74d7f7,#c084fc,#ff6b8a); background-size:200% 100%; animation:rainbowLed 3s linear infinite; }
+@keyframes barBounce { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.05)} }
+input[type=range] { -webkit-appearance:none; appearance:none; outline:none; cursor:pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#c084fc; border:2px solid #050505; box-shadow:0 0 8px rgba(192,132,252,0.6); }
 .lgd-ember {
   width: 5px; height: 5px; border-radius: 50%;
   background: #FF7A00;
@@ -111,6 +116,29 @@ function seededRNG(seed: number) {
     s = ((s * 1664525) + 1013904223) >>> 0;
     return s / 0x100000000;
   };
+}
+
+// ─── BADGES ──────────────────────────────────────────────────────────────────
+
+const ALL_BADGES = [
+  "astro_balls","zoom_in_vibe_out","showtime","flow_state",
+  "vibestr_bronze_tier","checkmate","vibefoot_fan_club","suited_up",
+  "astro_bean","gud_meat","hoodie_up_society","twenty_badges",
+  "yin_n_yang","vibestr_pink_tier","party_in_the_back",
+  "unfathomable_vibes","gradient_hatrick","one_of_one",
+  "fifty_badges","cosmic_guardian","super_rare","pothead",
+  "elite_rainbow_ranger","anchorman","rainbow_visor",
+];
+
+function getBadges(tokenId: number): string[] {
+  const rng = seededRNG(tokenId * 31 + 7);
+  const count = 2 + Math.floor(rng() * 3); // 2–4 badges
+  const pool = [...ALL_BADGES];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
 }
 
 // ─── WEB AUDIO SOUNDS ────────────────────────────────────────────────────────
@@ -565,6 +593,210 @@ function BattleCardFull({ card, highlightStat, winner, loser, faceDown }: Battle
   );
 }
 
+// ─── SHOWCASE CARD ────────────────────────────────────────────────────────────
+// Large, flippable, holographic card for the pack-rip reveal screen
+
+async function downloadShowcaseCard(card: BattleCard, badges: string[]) {
+  try {
+    const W = 420, H = 592;
+    const cv = document.createElement("canvas"); cv.width = W*2; cv.height = H*2;
+    const ctx = cv.getContext("2d")!; ctx.scale(2,2);
+    const tc = TIER_COLORS[card.tier];
+    const rr = (x:number,y:number,w:number,h:number,r:number) => {
+      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+      ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+      ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
+    };
+    const loadImg = (src:string) => new Promise<HTMLImageElement>(res => {
+      const img = new Image(); img.crossOrigin="anonymous";
+      img.onload=()=>res(img); img.onerror=()=>res(img); img.src=src;
+    });
+    ctx.save(); rr(0,0,W,H,18); ctx.clip();
+    // BG
+    const bg = ctx.createLinearGradient(0,0,W,H);
+    if(card.tier==="Legendary"){ bg.addColorStop(0,"#1a0e00"); bg.addColorStop(1,"#2c1c00"); }
+    else if(card.tier==="Rare"){ bg.addColorStop(0,"#0e0520"); bg.addColorStop(1,"#1c0a38"); }
+    else { bg.addColorStop(0,"#050508"); bg.addColorStop(1,"#0a0a18"); }
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    // Portrait
+    const portrait = await loadImg(`/api/portrait/${card.tokenId}`);
+    if(portrait.naturalWidth>0){
+      const ph=H*0.55; ctx.save(); rr(0,0,W,ph,0); ctx.clip();
+      const sc=Math.max(W/portrait.naturalWidth, ph/portrait.naturalHeight);
+      ctx.drawImage(portrait,(W-portrait.naturalWidth*sc)/2,0,portrait.naturalWidth*sc,portrait.naturalHeight*sc);
+      ctx.restore();
+    }
+    const vg=ctx.createLinearGradient(0,H*0.34,0,H*0.58); vg.addColorStop(0,"rgba(5,5,8,0)"); vg.addColorStop(1,"rgba(5,5,8,0.97)");
+    ctx.fillStyle=vg; ctx.fillRect(0,H*0.34,W,H*0.24);
+    const cs=getComputedStyle(document.documentElement);
+    const brice=cs.getPropertyValue("--font-brice").trim()||"serif";
+    const mundial=cs.getPropertyValue("--font-mundial").trim()||"sans-serif";
+    ctx.font=`12px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.65)"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(`GVC #${card.tokenId}`,14,22);
+    const tw=ctx.measureText(card.tier.toUpperCase()).width+18;
+    rr(W-tw-12,10,tw,22,5); ctx.fillStyle=tc.border+"22"; ctx.fill(); ctx.strokeStyle=tc.border; ctx.lineWidth=1; ctx.stroke();
+    ctx.font=`bold 11px ${brice}`; ctx.fillStyle=tc.border; ctx.textAlign="right"; ctx.fillText(card.tier.toUpperCase(),W-14,21);
+    const shaka=await loadImg("/shaka.png"); if(shaka.naturalWidth>0) ctx.drawImage(shaka,14,H*0.575,22,22);
+    ctx.font=`bold 20px ${brice}`; ctx.fillStyle=tc.border; ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+    ctx.shadowColor=tc.border; ctx.shadowBlur=14; ctx.fillText(card.archetype.toUpperCase(),42,H*0.595); ctx.shadowBlur=0;
+    // Badges
+    const BY=H*0.615;
+    await Promise.allSettled(badges.slice(0,5).map(async(b,i)=>{
+      const bi=await loadImg(`https://goodvibesclub.ai/badges/${b}.webp`);
+      if(bi.naturalWidth>0){ const bx=14+i*40,by=BY; ctx.save(); rr(bx,by,34,34,6); ctx.clip(); ctx.drawImage(bi,bx,by,34,34); ctx.restore(); }
+    }));
+    const statLabels=["RARITY","DRIP","ENERGY","AURA"] as const;
+    const statVals=[card.rarity,card.drip,card.energy,card.aura];
+    const statCols=["#ff6b8a","#74d7f7","#98f5c4","#c084fc"];
+    const SY=H*0.73,SH=46,SW=(W-28-5*3)/4;
+    statLabels.forEach((lbl,i)=>{
+      const sx=14+i*(SW+5); rr(sx,SY,SW,SH,7); ctx.fillStyle=statCols[i]+"18"; ctx.fill(); ctx.strokeStyle=statCols[i]+"55"; ctx.lineWidth=1; ctx.stroke();
+      ctx.font=`9px ${mundial}`; ctx.fillStyle=statCols[i]+"aa"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl,sx+SW/2,SY+13);
+      ctx.font=`bold 22px ${brice}`; ctx.fillStyle=statCols[i];
+      if(statVals[i]>=80){ctx.shadowColor=statCols[i];ctx.shadowBlur=10;} ctx.fillText(String(statVals[i]),sx+SW/2,SY+32); ctx.shadowBlur=0;
+    });
+    ctx.font=`9px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.22)"; ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(`TOTAL ${card.total}  ·  GVC VIBE BATTLE`,W/2,H-10);
+    ctx.restore(); rr(1,1,W-2,H-2,17); ctx.strokeStyle=tc.border; ctx.lineWidth=2.5; ctx.stroke();
+    const a=document.createElement("a"); a.download=`vibe-card-${card.tokenId}.png`; a.href=cv.toDataURL("image/png"); a.click();
+  } catch(e){ console.error("Download failed",e); }
+}
+
+function ShowcaseCard({ card }: { card: BattleCard }) {
+  const [flipped,   setFlipped]   = useState(false);
+  const [tilt,      setTilt]      = useState({ x:0, y:0 });
+  const [holo,      setHolo]      = useState({ x:50, y:50 });
+  const [dragging,  setDragging]  = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError,  setImgError]  = useState(false);
+  const drag = useRef({ sx:0, sy:0, tx:0, ty:0, moved:false, down:false });
+  const badges = useMemo(() => getBadges(card.tokenId), [card.tokenId]);
+  const tc = TIER_COLORS[card.tier];
+  const W = typeof window !== "undefined" ? Math.min(280, window.innerWidth - 44) : 270;
+  const H = Math.round(W * 1.42);
+
+  const onDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { sx:e.clientX, sy:e.clientY, tx:tilt.x, ty:tilt.y, moved:false, down:true };
+    setDragging(true);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    if (!drag.current.down) return;
+    const dx = e.clientX - drag.current.sx, dy = e.clientY - drag.current.sy;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
+    const r = e.currentTarget.getBoundingClientRect();
+    setHolo({ x:((e.clientX-r.left)/r.width)*100, y:((e.clientY-r.top)/r.height)*100 });
+    setTilt({ x:Math.max(-20,Math.min(20,drag.current.tx-dy*0.2)), y:Math.max(-28,Math.min(28,drag.current.ty+dx*0.35)) });
+  };
+  const onUp = () => {
+    if (!drag.current.down) return;
+    drag.current.down = false; setDragging(false);
+    if (!drag.current.moved) { sfxClick(); setFlipped(f=>!f); }
+    setTilt({ x:0, y:0 });
+  };
+
+  const totalRotY = (flipped ? 180 : 0) + tilt.y;
+  const holoGrad = [
+    `linear-gradient(${125+tilt.y*2.5+tilt.x*1.2}deg,`,
+    `hsla(${(holo.x*3.6)%360},100%,65%,0) 0%,`,
+    `hsla(${(holo.x*3.6+60)%360},100%,65%,0.26) 25%,`,
+    `hsla(${(holo.x*3.6+120)%360},100%,65%,0.30) 50%,`,
+    `hsla(${(holo.x*3.6+200)%360},100%,65%,0.22) 75%,`,
+    `hsla(${(holo.x*3.6+280)%360},100%,65%,0) 100%)`,
+  ].join("");
+  const holoOp = Math.min(1, 0.12 + Math.sqrt(tilt.x**2+tilt.y**2)/26);
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
+      <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.38)",margin:0,letterSpacing:"0.08em" }}>
+        Drag to tilt · Tap to flip · ✨ holographic
+      </p>
+      <div style={{ perspective:1200 }}>
+        <div
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
+          className="card-rotator"
+          style={{ width:W, height:H, position:"relative",
+            transform:`rotateX(${tilt.x}deg) rotateY(${totalRotY}deg)`,
+            transition:dragging?"none":"transform 0.6s cubic-bezier(0.175,0.885,0.32,1.275)",
+            cursor:dragging?"grabbing":"grab", userSelect:"none", touchAction:"none" }}
+        >
+          {/* ── FRONT ── */}
+          <div className="card-face" style={{ position:"absolute",inset:0,borderRadius:18,overflow:"hidden",
+            background:"#050508", border:`2.5px solid ${tc.border}`,
+            boxShadow:`0 0 0 1px ${tc.border}22, 0 0 40px ${tc.glow}, 0 24px 60px rgba(0,0,0,0.85)`,
+            transform:"translateZ(0.01px)" }}>
+            {/* Portrait */}
+            <div style={{ position:"absolute",top:0,left:0,right:0,height:"56%" }}>
+              {!imgLoaded&&!imgError&&<div style={{ position:"absolute",inset:0,background:"#0f0f1e",display:"flex",alignItems:"center",justifyContent:"center" }}><div className="gvc-spinner" style={{ width:22,height:22,border:`2px solid ${tc.border}`,borderTopColor:"transparent" }}/></div>}
+              {imgError&&<FallbackArt id={card.tokenId}/>}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/portrait/${card.tokenId}`} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",display:imgLoaded?"block":"none" }}
+                onLoad={()=>setImgLoaded(true)} onError={()=>setImgError(true)}/>
+              <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,transparent 30%,rgba(5,5,8,0.97) 100%)" }}/>
+              <div style={{ position:"absolute",top:0,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${W*0.04}px ${W*0.05}px`,background:"linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)" }}>
+                <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.035,color:"rgba(255,255,255,0.72)" }}>GVC #{card.tokenId}</span>
+                <div style={{ padding:`${W*0.015}px ${W*0.04}px`,borderRadius:5,background:`${tc.border}22`,border:`1px solid ${tc.border}`,fontFamily:"var(--font-brice)",fontSize:W*0.034,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.07em",textShadow:`0 0 10px ${tc.glow}` }}>
+                  {card.tier}
+                </div>
+              </div>
+            </div>
+            {/* Bottom panel */}
+            <div style={{ position:"absolute",bottom:0,left:0,right:0,padding:`${H*0.02}px ${W*0.055}px ${H*0.025}px`,display:"flex",flexDirection:"column",gap:H*0.012 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/shaka.png" alt="" style={{ width:W*0.07,height:W*0.07,filter:`drop-shadow(0 0 5px ${tc.glow})`,flexShrink:0 }}/>
+                <p style={{ fontFamily:"var(--font-brice)",fontSize:W*0.06,fontWeight:900,color:tc.border,textTransform:"uppercase",letterSpacing:"0.03em",textShadow:`0 0 18px ${tc.glow}`,lineHeight:1.05,margin:0 }}>{card.archetype}</p>
+              </div>
+              <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
+                {badges.map(b=>(
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={b} src={`https://goodvibesclub.ai/badges/${b}.webp`} alt={b} style={{ width:W*0.1,height:W*0.1,borderRadius:6,border:"1px solid rgba(255,255,255,0.12)" }} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+                ))}
+              </div>
+              <div style={{ display:"flex",gap:W*0.015 }}>
+                {(["RARITY","DRIP","ENERGY","AURA"] as RoundStat[]).map((stat,i)=>{
+                  const val=[card.rarity,card.drip,card.energy,card.aura][i];
+                  const col=STAT_COLORS[stat];
+                  return (
+                    <div key={stat} style={{ flex:1,background:`${col}18`,border:`1px solid ${col}44`,borderRadius:7,padding:`${H*0.009}px 0`,display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}>
+                      <span style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.024,color:`${col}aa`,letterSpacing:"0.07em",textTransform:"uppercase" }}>{STAT_LABELS[stat]}</span>
+                      <span style={{ fontFamily:"var(--font-brice)",fontSize:W*0.056,fontWeight:900,color:col,textShadow:val>=80?`0 0 10px ${col}`:"none",lineHeight:1.1 }}>{val}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.026,color:"rgba(255,255,255,0.22)",letterSpacing:"0.08em",textAlign:"center",margin:0 }}>
+                TOTAL {card.total} · GVC VIBE CARD
+              </p>
+            </div>
+            {/* Holographic overlay */}
+            <div style={{ position:"absolute",inset:0,zIndex:10,pointerEvents:"none",background:holoGrad,mixBlendMode:"color-dodge" as React.CSSProperties["mixBlendMode"],opacity:holoOp }}/>
+            <div className="card-shimmer" style={{ position:"absolute",inset:0,zIndex:11,pointerEvents:"none" }}/>
+          </div>
+          {/* ── BACK ── */}
+          <div className="card-face" style={{ position:"absolute",inset:0,borderRadius:18,overflow:"hidden",
+            background:"linear-gradient(160deg,#08001a,#14002e,#060012)",
+            border:`2.5px solid ${tc.border}`,boxShadow:`0 0 40px ${tc.glow},0 24px 60px rgba(0,0,0,0.85)`,
+            transform:"rotateY(180deg) translateZ(0.01px)",
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14 }}>
+            <div style={{ position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(45deg,rgba(255,224,72,0.022) 0,rgba(255,224,72,0.022) 1px,transparent 0,transparent 50%)",backgroundSize:"14px 14px" }}/>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/shaka.png" alt="" className="shaka-idle" style={{ width:W*0.42,height:W*0.42,filter:"drop-shadow(0 0 22px rgba(255,224,72,0.75))",position:"relative",zIndex:1 }}/>
+            <p style={{ fontFamily:"var(--font-brice)",fontSize:W*0.1,fontWeight:900,color:"#FFE048",textTransform:"uppercase",letterSpacing:"0.08em",textShadow:"0 0 30px rgba(255,224,72,0.85)",position:"relative",zIndex:1,textAlign:"center",lineHeight:1.1,margin:0 }}>GVC<br/>VIBE<br/>CARD</p>
+            <div style={{ padding:`${W*0.015}px ${W*0.042}px`,borderRadius:20,border:`1px solid ${tc.border}`,background:`${tc.border}14`,position:"relative",zIndex:1 }}>
+              <p style={{ fontFamily:"var(--font-brice)",fontSize:W*0.034,fontWeight:900,color:tc.border,margin:0,letterSpacing:"0.1em" }}>#{card.tokenId} · {card.tier}</p>
+            </div>
+            <p style={{ fontFamily:"var(--font-mundial)",fontSize:W*0.03,color:"rgba(255,255,255,0.22)",letterSpacing:"0.14em",position:"relative",zIndex:1,margin:0 }}>TAP TO FLIP</p>
+          </div>
+        </div>
+      </div>
+      {/* Download */}
+      <motion.button onClick={()=>downloadShowcaseCard(card,badges)} whileTap={{ scale:0.93 }}
+        style={{ padding:"9px 22px",background:"rgba(255,255,255,0.07)",border:"1.5px solid rgba(255,255,255,0.2)",borderRadius:10,color:"rgba(255,255,255,0.75)",fontFamily:"var(--font-brice)",fontSize:13,fontWeight:900,letterSpacing:"0.08em",cursor:"pointer" }}>
+        ↓ DOWNLOAD CARD
+      </motion.button>
+    </div>
+  );
+}
+
 // ─── PACK REVEAL ──────────────────────────────────────────────────────────────
 
 const PACK_W = 270;
@@ -973,6 +1205,11 @@ function PackRipScreen({
           RIP A PACK 🎴
         </motion.h2>
 
+        {/* Wallet connect */}
+        <div style={{ marginBottom: 20 }}>
+          <WalletConnect onSelectToken={id => { sfxClick(); setTokenInput(String(id)); generateCard(id); }} />
+        </div>
+
         {/* Input row */}
         <div style={{ display: "flex", gap: 8, marginBottom: 32, flexWrap: "wrap" }}>
           <input
@@ -1065,25 +1302,7 @@ function PackRipScreen({
                       })}
                     </div>
                   )}
-                  <BattleCardFull card={previewCard} />
-                </div>
-
-                <div style={{
-                  padding: "16px", borderRadius: 14,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  textAlign: "center",
-                }}>
-                  <p style={{
-                    fontFamily: "var(--font-brice)", fontSize: 14, fontWeight: 900,
-                    color: TIER_COLORS[previewCard.tier].label, margin: "0 0 4px",
-                    textTransform: "uppercase",
-                  }}>
-                    {previewCard.tier} — {previewCard.archetype}
-                  </p>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0, fontFamily: "var(--font-mundial)" }}>
-                    RARITY {previewCard.rarity} · DRIP {previewCard.drip} · ENERGY {previewCard.energy} · AURA {previewCard.aura} · TOTAL {previewCard.total}
-                  </p>
+                  <ShowcaseCard card={previewCard} />
                 </div>
 
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
@@ -2053,6 +2272,162 @@ function VictoryScreen({
   );
 }
 
+// ─── MUSIC PLAYER ────────────────────────────────────────────────────────────
+
+const BAR_COLORS = [
+  "#ff6b8a","#ff8a6b","#ffb347","#FFE048","#c8f560","#98f5c4",
+  "#6beaff","#74d7f7","#6baeff","#8a6bff","#c084fc","#e06bff",
+  "#ff6be0","#ff6bb5","#ff6b8a","#ff9b6b","#ffd06b","#e0f560",
+  "#98f5a4","#6bffea","#6bd7ff","#6b9eff","#9a6bff","#d06bff",
+];
+
+function MusicPlayer() {
+  const [playing,   setPlaying]   = useState(false);
+  const [volume,    setVolume]    = useState(0.7);
+  const [trackName, setTrackName] = useState<string | null>(null);
+  const [bars,      setBars]      = useState<number[]>(Array(24).fill(0));
+  const [mini,      setMini]      = useState(false);
+
+  const audioCtxRef  = useRef<AudioContext | null>(null);
+  const sourceRef    = useRef<AudioBufferSourceNode | null>(null);
+  const analyserRef  = useRef<AnalyserNode | null>(null);
+  const gainRef      = useRef<GainNode | null>(null);
+  const bufferRef    = useRef<AudioBuffer | null>(null);
+  const startRef     = useRef(0);
+  const offsetRef    = useRef(0);
+  const rafRef       = useRef(0);
+  const inputRef     = useRef<HTMLInputElement>(null);
+
+  const initCtx = useCallback(() => {
+    if (audioCtxRef.current) return audioCtxRef.current;
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
+    const gain = ctx.createGain(); gain.gain.value = volume;
+    analyser.connect(gain); gain.connect(ctx.destination);
+    audioCtxRef.current = ctx; analyserRef.current = analyser; gainRef.current = gain;
+    return ctx;
+  }, [volume]);
+
+  const updateBars = useCallback(() => {
+    if (!analyserRef.current) return;
+    const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(data);
+    const n = 24, bin = Math.floor(data.length / n);
+    setBars(Array.from({ length: n }, (_, i) => {
+      const slice = Array.from(data.slice(i*bin,(i+1)*bin));
+      return (slice.reduce((a,b)=>a+b,0)/slice.length)/255;
+    }));
+    rafRef.current = requestAnimationFrame(updateBars);
+  }, []);
+
+  const startPlayback = useCallback((off = 0) => {
+    const ctx = initCtx();
+    if (!bufferRef.current) return;
+    sourceRef.current?.stop(); sourceRef.current?.disconnect();
+    const src = ctx.createBufferSource();
+    src.buffer = bufferRef.current; src.loop = true;
+    src.connect(analyserRef.current!);
+    src.start(0, off % bufferRef.current.duration);
+    sourceRef.current = src; startRef.current = ctx.currentTime - (off % bufferRef.current.duration);
+    setPlaying(true);
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(updateBars);
+  }, [initCtx, updateBars]);
+
+  const pause = useCallback(() => {
+    if (!audioCtxRef.current || !sourceRef.current) return;
+    offsetRef.current = (audioCtxRef.current.currentTime - startRef.current) % (bufferRef.current?.duration ?? 1);
+    sourceRef.current.stop(); cancelAnimationFrame(rafRef.current);
+    setPlaying(false); setBars(Array(24).fill(0));
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    if (!bufferRef.current) return;
+    playing ? pause() : startPlayback(offsetRef.current);
+  }, [playing, pause, startPlayback]);
+
+  const onFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setTrackName(file.name.replace(/\.[^.]+$/, ""));
+    const ctx = initCtx();
+    const ab = await file.arrayBuffer();
+    const buf = await ctx.decodeAudioData(ab);
+    bufferRef.current = buf; offsetRef.current = 0;
+    startPlayback(0);
+  }, [initCtx, startPlayback]);
+
+  const onVol = (v: number) => { setVolume(v); if (gainRef.current) gainRef.current.gain.value = v; };
+
+  useEffect(() => () => { cancelAnimationFrame(rafRef.current); sourceRef.current?.stop(); }, []);
+
+  if (mini) {
+    return (
+      <motion.div initial={{ y:80 }} animate={{ y:0 }} onClick={() => setMini(false)}
+        style={{ position:"fixed",bottom:16,right:16,zIndex:999,background:"rgba(12,10,24,0.92)",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:"8px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:8 }}>
+        <span style={{ fontSize:18 }}>{playing?"🎵":"🎧"}</span>
+        <span style={{ fontFamily:"var(--font-mundial)",fontSize:11,color:"rgba(255,255,255,0.55)" }}>Music {playing?"▶":""}</span>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ y:100 }} animate={{ y:0 }} transition={{ delay:0.5 }}
+      style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:999 }}>
+      {/* Rainbow top border strip */}
+      <div className="rainbow-led" style={{ height:3 }}/>
+      {/* Panel */}
+      <div style={{ background:"rgba(10,8,22,0.96)",backdropFilter:"blur(16px)",paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+        {/* Visualiser bars */}
+        <div style={{ display:"flex",alignItems:"flex-end",gap:1.5,height:44,padding:"4px 12px 0",overflow:"hidden" }}>
+          {bars.map((h,i) => (
+            <div key={i} style={{
+              flex:1, minWidth:0,
+              height: Math.max(3, h*38)+"px",
+              background: BAR_COLORS[i%BAR_COLORS.length],
+              borderRadius:"2px 2px 0 0",
+              transition:"height 0.06s ease-out",
+              boxShadow: h>0.25?`0 0 6px ${BAR_COLORS[i%BAR_COLORS.length]}88`:"none",
+            }}/>
+          ))}
+        </div>
+        {/* Controls */}
+        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 12px 10px",flexWrap:"wrap" }}>
+          {/* Upload */}
+          <motion.button onClick={()=>inputRef.current?.click()} whileTap={{ scale:0.93 }}
+            style={{ padding:"5px 11px",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:8,color:"rgba(255,255,255,0.7)",fontFamily:"var(--font-mundial)",fontSize:11,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0 }}>
+            📂 Upload MP3
+          </motion.button>
+          <input ref={inputRef} type="file" accept="audio/*,audio/mp3,audio/mpeg" style={{ display:"none" }} onChange={onFile}/>
+          {/* Track name */}
+          <div style={{ flex:1,minWidth:60,overflow:"hidden" }}>
+            <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:trackName?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.25)" }}>
+              {trackName ? `${playing?"♫ ":"⏸ "}${trackName}` : "Upload an MP3 to vibe 🎵"}
+            </p>
+          </div>
+          {/* Play/pause */}
+          <motion.button onClick={togglePlay} disabled={!bufferRef.current} whileTap={{ scale:0.88 }}
+            style={{ width:36,height:36,borderRadius:"50%",background:playing?"linear-gradient(135deg,#ff6b8a,#c084fc)":"linear-gradient(135deg,#98f5c4,#74d7f7)",border:"none",cursor:bufferRef.current?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,opacity:bufferRef.current?1:0.3,flexShrink:0 }}>
+            {playing?"⏸":"▶"}
+          </motion.button>
+          {/* Volume */}
+          <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
+            <span style={{ fontSize:12 }}>{volume===0?"🔇":volume<0.5?"🔉":"🔊"}</span>
+            <input type="range" min="0" max="1" step="0.02" value={volume} onChange={e=>onVol(parseFloat(e.target.value))}
+              style={{ width:68,height:4,borderRadius:2,outline:"none",cursor:"pointer",
+                background:`linear-gradient(to right,#c084fc ${volume*100}%,rgba(255,255,255,0.15) ${volume*100}%)`,
+                WebkitAppearance:"none",appearance:"none" }}/>
+          </div>
+          {/* Minimise */}
+          <motion.button onClick={()=>setMini(true)} whileTap={{ scale:0.88 }}
+            style={{ background:"transparent",border:"none",color:"rgba(255,255,255,0.3)",cursor:"pointer",fontSize:14,padding:"2px 4px",flexShrink:0,lineHeight:1 }}>
+            ✕
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function Page() {
@@ -2131,6 +2506,7 @@ export default function Page() {
           </motion.div>
         )}
       </AnimatePresence>
+      <MusicPlayer />
     </>
   );
 }
