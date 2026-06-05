@@ -2296,7 +2296,6 @@ function MusicPlayer() {
   const startRef     = useRef(0);
   const offsetRef    = useRef(0);
   const rafRef       = useRef(0);
-  const inputRef     = useRef<HTMLInputElement>(null);
 
   const initCtx = useCallback(() => {
     if (audioCtxRef.current) return audioCtxRef.current;
@@ -2346,17 +2345,23 @@ function MusicPlayer() {
     playing ? pause() : startPlayback(offsetRef.current);
   }, [playing, pause, startPlayback]);
 
-  const onFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setTrackName(file.name.replace(/\.[^.]+$/, ""));
-    const ctx = initCtx();
-    const ab = await file.arrayBuffer();
-    const buf = await ctx.decodeAudioData(ab);
-    bufferRef.current = buf; offsetRef.current = 0;
-    startPlayback(0);
-  }, [initCtx, startPlayback]);
-
   const onVol = (v: number) => { setVolume(v); if (gainRef.current) gainRef.current.gain.value = v; };
+
+  // Pre-load the bundled track on mount — does NOT autoplay
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/sounds/Good Vibes Club.mp3")
+      .then(r => r.arrayBuffer())
+      .then(ab => {
+        if (cancelled) return;
+        const ctx = initCtx();
+        ctx.decodeAudioData(ab, buf => {
+          if (!cancelled) { bufferRef.current = buf; setTrackName("Good Vibes Club"); }
+        });
+      })
+      .catch(() => {}); // silently skip if file missing
+    return () => { cancelled = true; };
+  }, [initCtx]);
 
   useEffect(() => () => { cancelAnimationFrame(rafRef.current); sourceRef.current?.stop(); }, []);
 
@@ -2392,12 +2397,6 @@ function MusicPlayer() {
         </div>
         {/* Controls */}
         <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 12px 10px",flexWrap:"wrap" }}>
-          {/* Upload */}
-          <motion.button onClick={()=>inputRef.current?.click()} whileTap={{ scale:0.93 }}
-            style={{ padding:"5px 11px",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:8,color:"rgba(255,255,255,0.7)",fontFamily:"var(--font-mundial)",fontSize:11,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0 }}>
-            📂 Upload MP3
-          </motion.button>
-          <input ref={inputRef} type="file" accept="audio/*,audio/mp3,audio/mpeg" style={{ display:"none" }} onChange={onFile}/>
           {/* Track name */}
           <div style={{ flex:1,minWidth:60,overflow:"hidden" }}>
             <p style={{ fontFamily:"var(--font-mundial)",fontSize:11,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:trackName?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.25)" }}>
