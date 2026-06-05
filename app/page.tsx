@@ -598,13 +598,17 @@ function BattleCardFull({ card, highlightStat, winner, loser, faceDown }: Battle
 
 async function downloadShowcaseCard(card: BattleCard, badges: string[]) {
   try {
-    const W = 420, H = 596; // same ratio as on-screen card (1.42)
-    const S = 2; // retina scale
+    // Canvas is 2× the on-screen card for retina quality
+    // On-screen card uses W up to 300px; we render at 420px (same 1.42 ratio)
+    const W = 420, H = Math.round(W * 1.42); // 596
+    const S = 2;
     const cv = document.createElement("canvas"); cv.width = W*S; cv.height = H*S;
-    const ctx = cv.getContext("2d")!; ctx.scale(S,S);
+    const ctx = cv.getContext("2d")!; ctx.scale(S, S);
     const tc = TIER_COLORS[card.tier];
-    const statCols = ["#ff6b8a","#74d7f7","#98f5c4","#c084fc"] as const;
+    const STAT_COLS = ["#ff6b8a","#74d7f7","#98f5c4","#c084fc"] as const;
+    const PAD = Math.round(W * 0.048); // matches on-screen W*0.05
 
+    // ── helpers ──
     const rr = (x:number,y:number,w:number,h:number,r:number) => {
       ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
       ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
@@ -614,93 +618,130 @@ async function downloadShowcaseCard(card: BattleCard, badges: string[]) {
       const img = new Image(); img.crossOrigin="anonymous";
       img.onload=()=>res(img); img.onerror=()=>res(img); img.src=src;
     });
-
     const cs = getComputedStyle(document.documentElement);
-    const brice   = cs.getPropertyValue("--font-brice").trim()   || "serif";
-    const mundial = cs.getPropertyValue("--font-mundial").trim() || "sans-serif";
+    // CSS variable returns Next.js-hashed font family name; fall back gracefully
+    const B = cs.getPropertyValue("--font-brice").trim()   || "Impact";
+    const M = cs.getPropertyValue("--font-mundial").trim() || "Arial";
 
-    // ── Clip card shape ──
+    // ── Clip to rounded card ──
     ctx.save(); rr(0,0,W,H,18); ctx.clip();
 
-    // ── Background (dark, like on-screen) ──
+    // ── Solid dark background ──
     ctx.fillStyle = "#080810"; ctx.fillRect(0,0,W,H);
 
-    // ── Portrait FULL BLEED ──
+    // ── Portrait — full bleed, top-aligned (matches objectFit:cover objectPosition:center top) ──
     const portrait = await load(`/api/portrait/${card.tokenId}`);
     if (portrait.naturalWidth > 0) {
       const sc = Math.max(W/portrait.naturalWidth, H/portrait.naturalHeight);
-      ctx.drawImage(portrait, (W-portrait.naturalWidth*sc)/2, 0, portrait.naturalWidth*sc, portrait.naturalHeight*sc);
+      const pw = portrait.naturalWidth  * sc;
+      const ph = portrait.naturalHeight * sc;
+      ctx.drawImage(portrait, (W-pw)/2, 0, pw, ph); // horizontally centred, top-aligned
     }
 
-    // ── Top gradient (darkens top so HUD is readable) ──
-    const topGrad = ctx.createLinearGradient(0,0,0,H*0.18);
-    topGrad.addColorStop(0,"rgba(0,0,0,0.72)"); topGrad.addColorStop(1,"rgba(0,0,0,0)");
-    ctx.fillStyle=topGrad; ctx.fillRect(0,0,W,H*0.18);
+    // ── Top dark gradient (HUD legibility) — matches CSS gradient on top HUD ──
+    const topG = ctx.createLinearGradient(0,0,0,H*0.17);
+    topG.addColorStop(0,"rgba(0,0,0,0.72)"); topG.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=topG; ctx.fillRect(0,0,W,H*0.17);
 
-    // ── Bottom glass overlay (matches on-screen gradient) ──
-    const botGrad = ctx.createLinearGradient(0, H*0.44, 0, H);
-    botGrad.addColorStop(0,"rgba(5,5,10,0)");
-    botGrad.addColorStop(0.3,"rgba(5,5,10,0.55)");
-    botGrad.addColorStop(0.6,"rgba(5,5,10,0.92)");
-    botGrad.addColorStop(1,"rgba(5,5,10,0.98)");
-    ctx.fillStyle=botGrad; ctx.fillRect(0,H*0.44,W,H*0.56);
+    // ── Bottom glass overlay — exactly matches on-screen CSS:
+    //    linear-gradient(to top, rgba(5,5,10,0.98) 0%, 0.92 42%, 0.55 70%, transparent 100%)
+    //    overlay height = padTop(H*0.14) + content + padBottom(H*0.025)
+    //    = 83 + ~129 + 15 = 227px  → panel starts at H-227 = 369
+    const PANEL_H = Math.round(H * 0.38); // 226px
+    const PANEL_Y = H - PANEL_H;          // 370
+    const botG = ctx.createLinearGradient(0, H, 0, PANEL_Y); // bottom → panel top
+    botG.addColorStop(0,    "rgba(5,5,10,0.98)");
+    botG.addColorStop(0.42, "rgba(5,5,10,0.92)");
+    botG.addColorStop(0.70, "rgba(5,5,10,0.55)");
+    botG.addColorStop(1,    "rgba(5,5,10,0)");
+    ctx.fillStyle=botG; ctx.fillRect(0, PANEL_Y, W, PANEL_H);
 
-    // ── Top HUD: token ID left, tier badge right ──
-    const PAD = 16;
-    ctx.font=`12px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.8)"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(`GVC #${card.tokenId}`, PAD, 22);
+    // ── TOP HUD (token ID left, tier badge right) ──
+    // Mirrors: padding W*0.038 top, W*0.048 sides
+    const HUD_Y  = Math.round(W * 0.038); // ~16
+    const HUD_MID = HUD_Y + Math.round(W * 0.032); // vertical mid ~29
+
+    ctx.font=`${Math.round(W*0.034)}px "${M}","Arial"`; ctx.fillStyle="rgba(255,255,255,0.82)";
+    ctx.textAlign="left"; ctx.textBaseline="middle";
+    ctx.fillText(`GVC #${card.tokenId}`, PAD, HUD_MID);
+
     const tierTxt = card.tier.toUpperCase();
-    ctx.font=`bold 11px ${brice}`;
-    const tierW = ctx.measureText(tierTxt).width + 18;
-    rr(W-tierW-10, 10, tierW, 22, 5); ctx.fillStyle=tc.border+"28"; ctx.fill(); ctx.strokeStyle=tc.border; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle=tc.border; ctx.textAlign="right"; ctx.fillText(tierTxt, W-12, 21);
+    ctx.font=`900 ${Math.round(W*0.032)}px "${B}","Impact"`;
+    const tierTW = ctx.measureText(tierTxt).width;
+    const BADGE_W = tierTW + 18, BADGE_H = Math.round(W*0.068);
+    const BADGE_X = W - BADGE_W - PAD, BADGE_Y_TOP = HUD_Y - 2;
+    rr(BADGE_X, BADGE_Y_TOP, BADGE_W, BADGE_H, 5);
+    ctx.fillStyle=tc.border+"28"; ctx.fill();
+    ctx.strokeStyle=tc.border; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=tc.border; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(tierTxt, BADGE_X + BADGE_W/2, BADGE_Y_TOP + BADGE_H/2);
 
-    // ── Bottom content starts at ~62% down ──
-    const BOT = H*0.62;
+    // ── BOTTOM CONTENT — work from bottom upward, matching flex-column layout ──
+    // Sizes proportional to W=420 (same as on-screen proportions)
+    const GAP        = Math.round(H * 0.011); // 6–7px flex gap
+    const PAD_BOT    = Math.round(H * 0.025); // 15px bottom padding
+    const TOTAL_H    = Math.round(W * 0.026); // ~11px (font size for total text)
+    const STAT_NUM_H = Math.round(W * 0.055); // ~23px  stat number font
+    const STAT_LBL_H = Math.round(W * 0.022); // ~9px   stat label font
+    const STAT_ROW_H = STAT_LBL_H + STAT_NUM_H + 2; // ~34px
+    const BADGE_SZ   = Math.round(W * 0.095); // ~40px
+    const ARCH_H     = Math.round(W * 0.065); // ~27px (shaka + text row height)
+    const ARCH_FONT  = Math.round(W * 0.058); // ~24px
 
-    // Shaka + archetype
-    const shaka = await load("/shaka.png");
-    const SK = 22;
-    if (shaka.naturalWidth > 0) ctx.drawImage(shaka, PAD, BOT, SK, SK);
-    ctx.font=`bold 21px ${brice}`; ctx.fillStyle=tc.border;
-    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
-    ctx.shadowColor=tc.border; ctx.shadowBlur=16;
-    ctx.fillText(card.archetype.toUpperCase(), PAD+SK+6, BOT+17);
-    ctx.shadowBlur=0;
+    // Baselines/tops from bottom
+    const totalBaseline  = H - PAD_BOT;
+    const statsNumBase   = totalBaseline  - GAP - STAT_NUM_H;
+    const statsLblMid    = statsNumBase   - STAT_LBL_H - 2;
+    const badgeTop       = statsLblMid    - STAT_LBL_H/2 - GAP - BADGE_SZ;
+    const archTop        = badgeTop       - GAP - ARCH_H;
+    const archBaseline   = archTop + Math.round(ARCH_H * 0.82); // text baseline within row
 
-    // Badges — clean, no borders
-    const BD = 32, BG = 6;
-    const BY = BOT + 28;
-    await Promise.allSettled(badges.slice(0,5).map(async(b,i)=>{
-      const bi = await load(`https://goodvibesclub.ai/badges/${b}.webp`);
-      if (bi.naturalWidth>0) {
-        ctx.save(); rr(PAD+i*(BD+BG), BY, BD, BD, 6); ctx.clip();
-        ctx.drawImage(bi, PAD+i*(BD+BG), BY, BD, BD); ctx.restore();
-      }
-    }));
+    // Total
+    ctx.font=`${TOTAL_H}px "${M}","Arial"`; ctx.fillStyle="rgba(255,255,255,0.22)";
+    ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    ctx.fillText(`TOTAL ${card.total}`, W/2, totalBaseline);
 
-    // Stats — clean labels above, big bold numbers, no boxes
-    const STAT_Y = BY + BD + 14;
-    const statW = (W - PAD*2 - 3*8) / 4;
+    // Stats — 4 equal columns, centred
+    const COL_GAP = Math.round(W * 0.014);
+    const COL_W   = (W - PAD*2 - COL_GAP*3) / 4;
+    const colCX   = (i: number) => PAD + i*(COL_W + COL_GAP) + COL_W/2;
+
     const statLabels = ["RARITY","DRIP","ENERGY","AURA"] as const;
     const statVals   = [card.rarity, card.drip, card.energy, card.aura];
     statLabels.forEach((lbl, i) => {
-      const sx = PAD + i*(statW+8) + statW/2;
-      ctx.font=`9px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.38)";
-      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(lbl, sx, STAT_Y+6);
-      ctx.font=`bold 26px ${brice}`; ctx.fillStyle=statCols[i];
-      if(statVals[i]>=80){ ctx.shadowColor=statCols[i]; ctx.shadowBlur=12; }
-      ctx.textBaseline="alphabetic"; ctx.fillText(String(statVals[i]), sx, STAT_Y+34);
+      const cx = colCX(i);
+      ctx.font=`${STAT_LBL_H}px "${M}","Arial"`; ctx.fillStyle="rgba(255,255,255,0.38)";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(lbl, cx, statsLblMid);
+      ctx.font=`900 ${STAT_NUM_H}px "${B}","Impact"`; ctx.fillStyle=STAT_COLS[i];
+      if(statVals[i]>=80){ ctx.shadowColor=STAT_COLS[i]; ctx.shadowBlur=10; }
+      ctx.textBaseline="alphabetic"; ctx.fillText(String(statVals[i]), cx, statsNumBase);
       ctx.shadowBlur=0;
     });
 
-    // Total footer
-    ctx.font=`10px ${mundial}`; ctx.fillStyle="rgba(255,255,255,0.2)";
-    ctx.textAlign="center"; ctx.textBaseline="alphabetic";
-    ctx.fillText(`TOTAL ${card.total}  ·  GVC VIBE CARD`, W/2, H-10);
+    // Badges — clean circles, no border
+    await Promise.allSettled(badges.slice(0,5).map(async(b,i)=>{
+      const bi = await load(`https://goodvibesclub.ai/badges/${b}.webp`);
+      if (bi.naturalWidth>0){
+        ctx.save(); rr(PAD+i*(BADGE_SZ+4), badgeTop, BADGE_SZ, BADGE_SZ, 6); ctx.clip();
+        ctx.drawImage(bi, PAD+i*(BADGE_SZ+4), badgeTop, BADGE_SZ, BADGE_SZ);
+        ctx.restore();
+      }
+    }));
+
+    // Shaka + archetype
+    const shaka = await load("/shaka.png");
+    const SK = Math.round(ARCH_H * 0.9);
+    if (shaka.naturalWidth>0) ctx.drawImage(shaka, PAD, archTop + (ARCH_H-SK)/2, SK, SK);
+    ctx.font=`900 ${ARCH_FONT}px "${B}","Impact"`; ctx.fillStyle=tc.border;
+    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+    ctx.shadowColor=tc.border; ctx.shadowBlur=14;
+    ctx.fillText(card.archetype.toUpperCase(), PAD + SK + 6, archBaseline);
+    ctx.shadowBlur=0;
 
     ctx.restore(); // pop clip
 
-    // ── Tier border ──
+    // ── Tier border (drawn outside clip) ──
     rr(1,1,W-2,H-2,17); ctx.strokeStyle=tc.border; ctx.lineWidth=2.5; ctx.stroke();
 
     const a = document.createElement("a"); a.download=`vibe-card-${card.tokenId}.png`; a.href=cv.toDataURL("image/png"); a.click();
@@ -1530,7 +1571,10 @@ function BattleSetupScreen({
   );
 
   return (
-    <div style={{ minHeight: "100vh", position: "relative", overflow: "hidden", background: "rgba(15,15,30,0.98)" }}>
+    <div style={{ minHeight: "100vh", position: "relative", overflow: "hidden", background: "rgba(10,8,22,0.97)" }}>
+      {/* Pre-battle background */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/GVC PreBattle.png" alt="" aria-hidden style={{ position:"fixed",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",opacity:0.18,pointerEvents:"none",zIndex:0 }}/>
       <div style={{ position: "relative", zIndex: 1, padding: "24px 20px 80px", maxWidth: 600, margin: "0 auto" }}>
         {/* Back */}
         <motion.button
